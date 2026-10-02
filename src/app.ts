@@ -1,0 +1,60 @@
+import express, { Application, Request, Response } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
+import path from 'path';
+
+import authRoutes from './routes/authRoutes';
+import memberRoutes from './routes/memberRoutes';
+import newsRoutes from './routes/newsRoutes';
+import eventRoutes from './routes/eventRoutes';
+import verifyRoutes from './routes/verifyRoutes';
+import dashboardRoutes from './routes/dashboardRoutes';
+import cmsRoutes from './routes/cmsRoutes';
+
+import { errorHandler } from './middleware/errorHandler';
+
+const app: Application = express();
+
+// Security and Logging Middlewares
+app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(cors({ origin: '*', credentials: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(morgan('dev'));
+
+// Rate Limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300,
+  message: { success: false, message: 'Too many requests, please try again later.' },
+});
+app.use('/api/', limiter);
+
+// Static Uploads Folder
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.json({ status: 'UP', service: 'Community Platform Backend API', timestamp: new Date().toISOString() });
+});
+
+// Register API Route Modules
+app.use('/api/auth', authRoutes);
+app.use('/api/members', memberRoutes);
+app.use('/api/news', newsRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/verify', verifyRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api', cmsRoutes);
+
+// 404 Route Fallback
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found`, data: null, error: { code: 'NOT_FOUND' } });
+});
+
+// Centralized Error Handler
+app.use(errorHandler);
+
+export default app;

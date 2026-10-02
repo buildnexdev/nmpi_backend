@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const newsController_1 = require("../controllers/newsController");
+const authMiddleware_1 = require("../middleware/authMiddleware");
+const rbacMiddleware_1 = require("../middleware/rbacMiddleware");
+const constants_1 = require("../constants");
+const router = (0, express_1.Router)();
+router.get('/', newsController_1.getNewsList);
+router.get('/:id', newsController_1.getNewsById);
+router.post('/', authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)([constants_1.ROLES.SUPER_ADMIN, constants_1.ROLES.ADMIN]), newsController_1.createNews);
+exports.default = router;

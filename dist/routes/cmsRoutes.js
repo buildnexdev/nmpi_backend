@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const cmsController_1 = require("../controllers/cmsController");
+const router = (0, express_1.Router)();
+router.get('/leadership', cmsController_1.getLeaders);
+router.get('/pages/:key', cmsController_1.getPage);
+router.get('/gallery/albums', cmsController_1.getGalleryAlbums);
+router.get('/geography', cmsController_1.getGeography);
+exports.default = router;
