@@ -1,8 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const verificationController_1 = require("../controllers/verificationController");
+const memberController_1 = require("../controllers/memberController");
 const router = (0, express_1.Router)();
-// Public QR Member Verification Endpoint
-router.get('/member/:token', verificationController_1.verifyMemberToken);
+router.get('/:token', memberController_1.verifyMemberByToken);
 exports.default = router;

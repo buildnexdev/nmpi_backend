@@ -1,8 +1,11 @@
 /**
- * Formats a sequence integer into a standard Member ID.
- * Example: generateMemberId(104) -> "ORG-2026-000104"
+ * Generates a unique Member ID based on Parliament Constituency Code.
+ * Format: 001[PARLIAMENT_CODE][5_DIGIT_SEQ]
+ * Example: generateMemberId(42131, 'TR') -> "001TR42131"
  */
-export function generateMemberId(sequenceNumber: number, year: number = new Date().getFullYear()): string {
-  const padded = sequenceNumber.toString().padStart(6, '0');
-  return `ORG-${year}-${padded}`;
+export function generateMemberId(sequenceId: number, parliamentCode: string = 'TN'): string {
+  const code = (parliamentCode || 'TN').toUpperCase().trim();
+  const paddedSeq = sequenceId.toString().padStart(5, '0');
+  const prefix = '001';
+  return `${prefix}${code}${paddedSeq}`;
 }

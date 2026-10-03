@@ -7,6 +7,7 @@ import path from 'path';
 
 import authRoutes from './routes/authRoutes';
 import memberRoutes from './routes/memberRoutes';
+import masterDataRoutes from './routes/masterDataRoutes';
 import newsRoutes from './routes/newsRoutes';
 import eventRoutes from './routes/eventRoutes';
 import verifyRoutes from './routes/verifyRoutes';
@@ -43,6 +44,7 @@ app.get('/health', (req: Request, res: Response) => {
 // Register API Route Modules
 app.use('/api/auth', authRoutes);
 app.use('/api/members', memberRoutes);
+app.use('/api/master-data', masterDataRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/verify', verifyRoutes);

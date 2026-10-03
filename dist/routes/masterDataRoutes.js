@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const masterDataController_1 = require("../controllers/masterDataController");
+const router = (0, express_1.Router)();
+router.get('/states', masterDataController_1.getStates);
+router.get('/parliaments', masterDataController_1.getParliaments);
+router.get('/assemblies', masterDataController_1.getAssemblies);
+router.get('/districts', masterDataController_1.getDistricts);
+router.get('/blocks', masterDataController_1.getBlocks);
+router.get('/villages', masterDataController_1.getVillages);
+router.get('/roles', masterDataController_1.getRoles);
+exports.default = router;

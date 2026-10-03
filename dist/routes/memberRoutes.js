@@ -2,14 +2,16 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const memberController_1 = require("../controllers/memberController");
-const authMiddleware_1 = require("../middleware/authMiddleware");
-const rbacMiddleware_1 = require("../middleware/rbacMiddleware");
-const constants_1 = require("../constants");
+const uploadMiddleware_1 = require("../middleware/uploadMiddleware");
 const router = (0, express_1.Router)();
-router.get('/me', authMiddleware_1.authenticateJWT, memberController_1.getMyProfile);
-router.get('/:id/qr', authMiddleware_1.authenticateJWT, memberController_1.getMemberQr);
-// Administrative member management routes
-router.get('/', authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)([constants_1.ROLES.SUPER_ADMIN, constants_1.ROLES.ADMIN, constants_1.ROLES.DISTRICT_ADMIN, constants_1.ROLES.TALUK_ADMIN, constants_1.ROLES.UNIT_ADMIN]), memberController_1.getMembers);
-router.get('/:id', authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)([constants_1.ROLES.SUPER_ADMIN, constants_1.ROLES.ADMIN, constants_1.ROLES.DISTRICT_ADMIN, constants_1.ROLES.TALUK_ADMIN, constants_1.ROLES.UNIT_ADMIN]), memberController_1.getMemberById);
-router.patch('/:id/status', authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)([constants_1.ROLES.SUPER_ADMIN, constants_1.ROLES.ADMIN, constants_1.ROLES.DISTRICT_ADMIN, constants_1.ROLES.TALUK_ADMIN]), memberController_1.updateStatus);
+// Public registration & duplicate check endpoints
+router.get('/check-phone', memberController_1.checkPhone);
+router.get('/check-aadhaar', memberController_1.checkAadhaar);
+router.get('/check-voter-id', memberController_1.checkVoterId);
+router.post('/register', uploadMiddleware_1.uploadProfileImage.single('profile_image'), memberController_1.registerMember);
+router.get('/:memberId/id-card', memberController_1.downloadIdCardPdf);
+// General member endpoints
+router.get('/', memberController_1.getMembers);
+router.get('/:id', memberController_1.getMemberById);
+router.get('/:id/qr', memberController_1.getMemberQr);
 exports.default = router;

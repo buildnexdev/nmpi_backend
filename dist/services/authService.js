@@ -12,7 +12,7 @@ class AuthService {
     static async registerMember(data) {
         const db = await (0, database_1.getDbConnection)();
         if (db) {
-            const [existingUsers] = await db.query('SELECT id FROM users WHERE email = ? OR mobile = ?', [data.email, data.mobile]);
+            const [existingUsers] = await db.query('SELECT id FROM users WHERE email = ? OR phone_number = ?', [data.email, data.mobile || data.phone_number]);
             if (existingUsers.length > 0) {
                 throw new Error('A member with this email or mobile number is already registered.');
             }
@@ -20,7 +20,7 @@ class AuthService {
             const conn = await db.getConnection();
             try {
                 await conn.beginTransaction();
-                const [userResult] = await conn.query('INSERT INTO users (email, mobile, password_hash, status) VALUES (?, ?, ?, ?)', [data.email, data.mobile, passwordHash, 'ACTIVE']);
+                const [userResult] = await conn.query('INSERT INTO users (email, country_code, phone_number, password_hash, status) VALUES (?, ?, ?, ?, ?)', [data.email, data.country_code || '+91', data.mobile || data.phone_number, passwordHash, 'ACTIVE']);
                 const userId = userResult.insertId;
                 await conn.query('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [userId, 6]);
                 const [memberResult] = await conn.query(`INSERT INTO members (
@@ -105,7 +105,7 @@ class AuthService {
     static async login(loginStr, passwordStr) {
         const db = await (0, database_1.getDbConnection)();
         if (db) {
-            const [users] = await db.query('SELECT * FROM users WHERE email = ? OR mobile = ?', [loginStr, loginStr]);
+            const [users] = await db.query('SELECT * FROM users WHERE email = ? OR phone_number = ?', [loginStr, loginStr]);
             if (users.length === 0) {
                 throw new Error('Invalid credentials');
             }

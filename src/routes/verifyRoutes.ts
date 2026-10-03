@@ -1,9 +1,8 @@
 import { Router } from 'express';
-import { verifyMemberToken } from '../controllers/verificationController';
+import { verifyMemberByToken } from '../controllers/memberController';
 
 const router = Router();
 
-// Public QR Member Verification Endpoint
-router.get('/member/:token', verifyMemberToken);
+router.get('/:token', verifyMemberByToken);
 
 export default router;

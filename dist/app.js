@@ -11,6 +11,7 @@ const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const path_1 = __importDefault(require("path"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const memberRoutes_1 = __importDefault(require("./routes/memberRoutes"));
+const masterDataRoutes_1 = __importDefault(require("./routes/masterDataRoutes"));
 const newsRoutes_1 = __importDefault(require("./routes/newsRoutes"));
 const eventRoutes_1 = __importDefault(require("./routes/eventRoutes"));
 const verifyRoutes_1 = __importDefault(require("./routes/verifyRoutes"));
@@ -40,6 +41,7 @@ app.get('/health', (req, res) => {
 // Register API Route Modules
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/members', memberRoutes_1.default);
+app.use('/api/master-data', masterDataRoutes_1.default);
 app.use('/api/news', newsRoutes_1.default);
 app.use('/api/events', eventRoutes_1.default);
 app.use('/api/verify', verifyRoutes_1.default);

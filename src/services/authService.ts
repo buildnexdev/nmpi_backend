@@ -13,8 +13,8 @@ export class AuthService {
     
     if (db) {
       const [existingUsers]: any = await db.query(
-        'SELECT id FROM users WHERE email = ? OR mobile = ?',
-        [data.email, data.mobile]
+        'SELECT id FROM users WHERE email = ? OR phone_number = ?',
+        [data.email, data.mobile || data.phone_number]
       );
       if (existingUsers.length > 0) {
         throw new Error('A member with this email or mobile number is already registered.');
@@ -27,8 +27,8 @@ export class AuthService {
         await conn.beginTransaction();
 
         const [userResult]: any = await conn.query(
-          'INSERT INTO users (email, mobile, password_hash, status) VALUES (?, ?, ?, ?)',
-          [data.email, data.mobile, passwordHash, 'ACTIVE']
+          'INSERT INTO users (email, country_code, phone_number, password_hash, status) VALUES (?, ?, ?, ?, ?)',
+          [data.email, data.country_code || '+91', data.mobile || data.phone_number, passwordHash, 'ACTIVE']
         );
         const userId = userResult.insertId;
 
@@ -131,7 +131,7 @@ export class AuthService {
 
     if (db) {
       const [users]: any = await db.query(
-        'SELECT * FROM users WHERE email = ? OR mobile = ?',
+        'SELECT * FROM users WHERE email = ? OR phone_number = ?',
         [loginStr, loginStr]
       );
 

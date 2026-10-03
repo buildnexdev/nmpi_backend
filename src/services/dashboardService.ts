@@ -12,10 +12,30 @@ export class DashboardService {
       const [newsRow]: any = await db.query("SELECT COUNT(*) as count FROM news WHERE status = 'PUBLISHED'");
 
       const [districtCounts]: any = await db.query(`
-        SELECT d.name as district_name, COUNT(m.id) as count
+        SELECT d.name_en as district_name, d.name_ta as district_name_ta, COUNT(m.id) as count
         FROM districts d
         LEFT JOIN members m ON d.id = m.district_id
-        GROUP BY d.id, d.name
+        GROUP BY d.id, d.name_en, d.name_ta
+        HAVING count > 0
+        ORDER BY count DESC
+        LIMIT 10
+      `);
+
+      const [parliamentCounts]: any = await db.query(`
+        SELECT pc.id, pc.name_en as parliament_name, pc.name_ta as parliament_name_ta, pc.code as parliament_code, COUNT(m.id) as count
+        FROM parliament_constituencies pc
+        LEFT JOIN members m ON pc.id = m.parliament_constituency_id
+        GROUP BY pc.id, pc.name_en, pc.name_ta, pc.code
+        ORDER BY count DESC, pc.name_en ASC
+        LIMIT 15
+      `);
+
+      const [roleCounts]: any = await db.query(`
+        SELECT r.name as role_name, COUNT(m.id) as count
+        FROM roles r
+        LEFT JOIN members m ON r.id = m.role_id
+        GROUP BY r.id, r.name
+        ORDER BY count DESC
       `);
 
       return {
@@ -26,6 +46,8 @@ export class DashboardService {
         upcoming_events: eventsRow[0].count,
         published_news: newsRow[0].count,
         district_counts: districtCounts,
+        parliament_counts: parliamentCounts,
+        role_counts: roleCounts
       };
     } else {
       const total_members = mockDbStore.members.length;
@@ -34,11 +56,6 @@ export class DashboardService {
       const upcoming_events = mockDbStore.events.filter(e => e.status === 'UPCOMING').length;
       const published_news = mockDbStore.news.filter(n => n.status === 'PUBLISHED').length;
 
-      const district_counts = mockDbStore.districts.map(d => {
-        const count = mockDbStore.members.filter(m => m.district_id === d.id).length;
-        return { district_name: d.name, count };
-      });
-
       return {
         total_members,
         pending_applications,
@@ -46,7 +63,9 @@ export class DashboardService {
         active_members: approved_members,
         upcoming_events,
         published_news,
-        district_counts,
+        district_counts: [],
+        parliament_counts: [],
+        role_counts: []
       };
     }
   }
