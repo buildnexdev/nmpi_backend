@@ -1,76 +1,114 @@
-import { getDbConnection, mockDbStore } from '../config/database';
+import { getDbConnection } from '../config/database';
+import { HttpError } from '../types';
+import { slugify, requireFields, pickOptional, oneOf } from '../utils/content';
+
+const STATUSES = ['UPCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED'] as const;
+const REQUIRED: Array<[string, string]> = [
+  ['title', 'Title'],
+  ['description', 'Description'],
+  ['location', 'Location'],
+  ['event_date', 'Event date'],
+  ['start_time', 'Start time'],
+];
+
+function validate(data: any) {
+  requireFields(data, REQUIRED);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.event_date))) {
+    throw new HttpError(400, 'Event date must be in YYYY-MM-DD format', 'VALIDATION_ERROR', { field: 'event_date' });
+  }
+  if (!/^\d{2}:\d{2}(:\d{2})?$/.test(String(data.start_time))) {
+    throw new HttpError(400, 'Start time must be in HH:MM format', 'VALIDATION_ERROR', { field: 'start_time' });
+  }
+}
 
 export class EventService {
-  static async getEvents(status?: string) {
+  static async list(filters: any, includeAll: boolean) {
     const db = await getDbConnection();
-    if (db) {
-      let query = 'SELECT * FROM events WHERE 1=1';
-      const params: any[] = [];
-      if (status) {
-        query += ' AND status = ?';
-        params.push(status);
-      }
-      query += ' ORDER BY event_date ASC';
-      const [rows]: any = await db.query(query, params);
-      return rows;
-    } else {
-      if (status) return mockDbStore.events.filter(e => e.status === status);
-      return mockDbStore.events;
+    let query = 'SELECT * FROM events WHERE 1=1';
+    const params: any[] = [];
+
+    if (STATUSES.includes(filters.status)) {
+      query += ' AND status = ?';
+      params.push(filters.status);
+    } else if (!includeAll) {
+      query += " AND status <> 'CANCELLED'";
     }
+    if (filters.upcoming === 'true') query += ' AND event_date >= CURDATE()';
+    query += filters.upcoming === 'true' ? ' ORDER BY event_date ASC, start_time ASC' : ' ORDER BY event_date DESC, start_time ASC';
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(Math.min(Number(filters.limit) || 10, 100));
+    }
+
+    const [rows]: any = await db.query(query, params);
+    return rows;
   }
 
-  static async getEventById(idOrSlug: string | number) {
+  static async get(idOrSlug: string) {
     const db = await getDbConnection();
-    if (db) {
-      const [rows]: any = await db.query('SELECT * FROM events WHERE id = ? OR slug = ?', [idOrSlug, idOrSlug]);
-      return rows[0] || null;
-    } else {
-      return mockDbStore.events.find(e => e.id === Number(idOrSlug) || e.slug === String(idOrSlug)) || null;
-    }
+    const [rows]: any = await db.query('SELECT * FROM events WHERE id = ? OR slug = ? LIMIT 1', [Number(idOrSlug) || 0, idOrSlug]);
+    return rows[0] || null;
   }
 
-  static async createEvent(data: any, organizerId: number) {
+  static async create(data: any, organizerId: number) {
+    validate(data);
     const db = await getDbConnection();
-    const slug = data.slug || data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const [res]: any = await db.query(
+      `INSERT INTO events (organizer_id, title, title_ta, slug, description, description_ta, location, venue_address,
+         event_date, start_time, end_time, cover_image, capacity, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        organizerId,
+        String(data.title).trim(),
+        pickOptional(data, 'title_ta'),
+        slugify(data.title),
+        String(data.description),
+        pickOptional(data, 'description_ta'),
+        String(data.location).trim(),
+        pickOptional(data, 'venue_address'),
+        data.event_date,
+        data.start_time,
+        pickOptional(data, 'end_time'),
+        pickOptional(data, 'cover_image'),
+        Number(data.capacity) || 500,
+        oneOf(data.status, STATUSES, 'UPCOMING'),
+      ]
+    );
+    return this.get(String(res.insertId));
+  }
 
-    if (db) {
-      const [res]: any = await db.query(
-        `INSERT INTO events (organizer_id, title, slug, description, location, venue_address, event_date, start_time, end_time, cover_image, capacity, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          organizerId,
-          data.title,
-          slug,
-          data.description,
-          data.location,
-          data.venue_address,
-          data.event_date,
-          data.start_time,
-          data.end_time || null,
-          data.cover_image || null,
-          data.capacity || 300,
-          data.status || 'UPCOMING',
-        ]
-      );
-      return { id: res.insertId, ...data, slug };
-    } else {
-      const newObj = {
-        id: mockDbStore.events.length + 1,
-        organizer_id: organizerId,
-        title: data.title,
-        slug,
-        description: data.description,
-        location: data.location,
-        venue_address: data.venue_address,
-        event_date: data.event_date,
-        start_time: data.start_time,
-        end_time: data.end_time || '17:00:00',
-        cover_image: data.cover_image || 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=800',
-        status: data.status || 'UPCOMING',
-        capacity: Number(data.capacity || 300),
-      };
-      mockDbStore.events.unshift(newObj as any);
-      return newObj;
-    }
+  static async update(id: number, data: any) {
+    const existing = await this.get(String(id));
+    if (!existing) throw new HttpError(404, 'Event not found', 'NOT_FOUND');
+    const merged = { ...existing, ...data };
+    validate(merged);
+
+    const db = await getDbConnection();
+    await db.query(
+      `UPDATE events SET title = ?, title_ta = ?, description = ?, description_ta = ?, location = ?, venue_address = ?,
+         event_date = ?, start_time = ?, end_time = ?, cover_image = ?, capacity = ?, status = ? WHERE id = ?`,
+      [
+        String(merged.title).trim(),
+        pickOptional(merged, 'title_ta'),
+        String(merged.description),
+        pickOptional(merged, 'description_ta'),
+        String(merged.location).trim(),
+        pickOptional(merged, 'venue_address'),
+        merged.event_date,
+        merged.start_time,
+        pickOptional(merged, 'end_time'),
+        pickOptional(merged, 'cover_image'),
+        Number(merged.capacity) || 500,
+        oneOf(merged.status, STATUSES, 'UPCOMING'),
+        id,
+      ]
+    );
+    return this.get(String(id));
+  }
+
+  static async remove(id: number) {
+    const db = await getDbConnection();
+    const [res]: any = await db.query('DELETE FROM events WHERE id = ?', [id]);
+    if (res.affectedRows === 0) throw new HttpError(404, 'Event not found', 'NOT_FOUND');
   }
 }

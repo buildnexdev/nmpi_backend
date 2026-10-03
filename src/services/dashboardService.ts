@@ -1,72 +1,75 @@
-import { getDbConnection, mockDbStore } from '../config/database';
+import { getDbConnection } from '../config/database';
+import { StaffScope } from './memberService';
 
 export class DashboardService {
-  static async getStatistics() {
+  static async getStatistics(scope: StaffScope | null) {
     const db = await getDbConnection();
+    const scopeSql = scope ? `AND ${scope.column} = ?` : '';
+    const scopeParams = scope ? [scope.value] : [];
 
-    if (db) {
-      const [totalMembersRow]: any = await db.query('SELECT COUNT(*) as count FROM members');
-      const [pendingAppsRow]: any = await db.query("SELECT COUNT(*) as count FROM members WHERE status = 'PENDING'");
-      const [approvedRow]: any = await db.query("SELECT COUNT(*) as count FROM members WHERE status = 'APPROVED'");
-      const [eventsRow]: any = await db.query("SELECT COUNT(*) as count FROM events WHERE status = 'UPCOMING'");
-      const [newsRow]: any = await db.query("SELECT COUNT(*) as count FROM news WHERE status = 'PUBLISHED'");
+    const [[statusRow]]: any = await db.query(
+      `SELECT COUNT(*) AS total,
+              SUM(m.status = 'APPROVED') AS approved,
+              SUM(m.status = 'PENDING') AS pending,
+              SUM(m.status = 'SUSPENDED') AS suspended,
+              SUM(m.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)) AS last_30_days
+       FROM members m WHERE 1=1 ${scopeSql}`,
+      scopeParams
+    );
+    const [[eventsRow]]: any = await db.query("SELECT COUNT(*) AS c FROM events WHERE status = 'UPCOMING' AND event_date >= CURDATE()");
+    const [[newsRow]]: any = await db.query("SELECT COUNT(*) AS c FROM news WHERE status = 'PUBLISHED'");
 
-      const [districtCounts]: any = await db.query(`
-        SELECT d.name_en as district_name, d.name_ta as district_name_ta, COUNT(m.id) as count
-        FROM districts d
-        LEFT JOIN members m ON d.id = m.district_id
-        GROUP BY d.id, d.name_en, d.name_ta
-        HAVING count > 0
-        ORDER BY count DESC
-        LIMIT 10
-      `);
+    const [districtCounts]: any = await db.query(
+      `SELECT d.id, d.name_en AS district_name, d.name_ta AS district_name_ta, COUNT(m.id) AS count
+       FROM members m JOIN districts d ON d.id = m.district_id
+       WHERE 1=1 ${scopeSql}
+       GROUP BY d.id, d.name_en, d.name_ta ORDER BY count DESC LIMIT 10`,
+      scopeParams
+    );
 
-      const [parliamentCounts]: any = await db.query(`
-        SELECT pc.id, pc.name_en as parliament_name, pc.name_ta as parliament_name_ta, pc.code as parliament_code, COUNT(m.id) as count
-        FROM parliament_constituencies pc
-        LEFT JOIN members m ON pc.id = m.parliament_constituency_id
-        GROUP BY pc.id, pc.name_en, pc.name_ta, pc.code
-        ORDER BY count DESC, pc.name_en ASC
-        LIMIT 15
-      `);
+    const [parliamentCounts]: any = await db.query(
+      `SELECT pc.id, pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta, pc.code AS parliament_code, COUNT(m.id) AS count
+       FROM members m JOIN parliament_constituencies pc ON pc.id = m.parliament_constituency_id
+       WHERE 1=1 ${scopeSql}
+       GROUP BY pc.id, pc.name_en, pc.name_ta, pc.code ORDER BY count DESC LIMIT 10`,
+      scopeParams
+    );
 
-      const [roleCounts]: any = await db.query(`
-        SELECT r.name as role_name, COUNT(m.id) as count
-        FROM roles r
-        LEFT JOIN members m ON r.id = m.role_id
-        GROUP BY r.id, r.name
-        ORDER BY count DESC
-      `);
+    const [roleCounts]: any = await db.query(
+      `SELECT r.name AS role_name, COUNT(m.id) AS count
+       FROM roles r LEFT JOIN members m ON r.id = m.role_id ${scope ? `AND ${scope.column} = ?` : ''}
+       GROUP BY r.id, r.name ORDER BY r.id`,
+      scopeParams
+    );
 
-      return {
-        total_members: totalMembersRow[0].count,
-        pending_applications: pendingAppsRow[0].count,
-        approved_members: approvedRow[0].count,
-        active_members: approvedRow[0].count,
-        upcoming_events: eventsRow[0].count,
-        published_news: newsRow[0].count,
-        district_counts: districtCounts,
-        parliament_counts: parliamentCounts,
-        role_counts: roleCounts
-      };
-    } else {
-      const total_members = mockDbStore.members.length;
-      const pending_applications = mockDbStore.members.filter(m => m.status === 'PENDING').length;
-      const approved_members = mockDbStore.members.filter(m => m.status === 'APPROVED').length;
-      const upcoming_events = mockDbStore.events.filter(e => e.status === 'UPCOMING').length;
-      const published_news = mockDbStore.news.filter(n => n.status === 'PUBLISHED').length;
+    const [monthly]: any = await db.query(
+      `SELECT DATE_FORMAT(m.created_at, '%Y-%m') AS month, COUNT(*) AS count
+       FROM members m
+       WHERE m.created_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 5 MONTH) ${scopeSql}
+       GROUP BY month ORDER BY month`,
+      scopeParams
+    );
 
-      return {
-        total_members,
-        pending_applications,
-        approved_members,
-        active_members: approved_members,
-        upcoming_events,
-        published_news,
-        district_counts: [],
-        parliament_counts: [],
-        role_counts: []
-      };
-    }
+    const [recentMembers]: any = await db.query(
+      `SELECT m.id, m.member_id, m.full_name, m.profile_image, m.status, m.created_at, d.name_en AS district_name
+       FROM members m LEFT JOIN districts d ON d.id = m.district_id
+       WHERE 1=1 ${scopeSql} ORDER BY m.id DESC LIMIT 6`,
+      scopeParams
+    );
+
+    return {
+      total_members: Number(statusRow.total) || 0,
+      approved_members: Number(statusRow.approved) || 0,
+      pending_applications: Number(statusRow.pending) || 0,
+      suspended_members: Number(statusRow.suspended) || 0,
+      new_last_30_days: Number(statusRow.last_30_days) || 0,
+      upcoming_events: Number(eventsRow.c) || 0,
+      published_news: Number(newsRow.c) || 0,
+      district_counts: districtCounts.map((r: any) => ({ ...r, count: Number(r.count) })),
+      parliament_counts: parliamentCounts.map((r: any) => ({ ...r, count: Number(r.count) })),
+      role_counts: roleCounts.map((r: any) => ({ ...r, count: Number(r.count) })),
+      monthly_registrations: monthly.map((r: any) => ({ ...r, count: Number(r.count) })),
+      recent_members: recentMembers,
+    };
   }
 }

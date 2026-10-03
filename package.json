@@ -7,7 +7,10 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "seed": "ts-node src/utils/seedRunner.ts"
+    "typecheck": "tsc --noEmit",
+    "seed:master-data": "ts-node --transpile-only src/scripts/seedMasterData.ts",
+    "create-admin": "ts-node --transpile-only src/scripts/createAdmin.ts",
+    "test:smoke": "ts-node --transpile-only src/scripts/smokeTest.ts"
   },
   "dependencies": {
     "@types/pdfkit": "^0.17.6",

@@ -1,245 +1,99 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { getDbConnection, mockDbStore } from '../config/database';
-import { generateMemberId } from '../functions/generateMemberId';
-import { generateQrToken } from '../functions/generateQrToken';
-import { saveMemberQrImage } from '../utils/qrCodeGenerator';
+import { getDbConnection } from '../config/database';
+import { JWT_SECRET } from '../middleware/authMiddleware';
+import { ROLE_NAME_TO_CODE } from '../constants';
+import { HttpError } from '../types';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_2026_community_platform';
+export function normalizePhone(value: string): string {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+}
 
 export class AuthService {
-  static async registerMember(data: any) {
+  static async getSessionUser(userId: number) {
     const db = await getDbConnection();
-    
-    if (db) {
-      const [existingUsers]: any = await db.query(
-        'SELECT id FROM users WHERE email = ? OR phone_number = ?',
-        [data.email, data.mobile || data.phone_number]
-      );
-      if (existingUsers.length > 0) {
-        throw new Error('A member with this email or mobile number is already registered.');
-      }
+    const [users]: any = await db.query(
+      'SELECT id, email, country_code, phone_number, status FROM users WHERE id = ?',
+      [userId]
+    );
+    if (users.length === 0) return null;
+    const user = users[0];
 
-      const passwordHash = await bcrypt.hash(data.password, 10);
-      
-      const conn = await db.getConnection();
-      try {
-        await conn.beginTransaction();
+    const [roleRows]: any = await db.query(
+      'SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = ?',
+      [userId]
+    );
+    const roleNames: string[] = roleRows.map((r: any) => r.name);
+    const roles = Array.from(new Set(roleNames.map((n) => ROLE_NAME_TO_CODE[n]).filter(Boolean)));
 
-        const [userResult]: any = await conn.query(
-          'INSERT INTO users (email, country_code, phone_number, password_hash, status) VALUES (?, ?, ?, ?, ?)',
-          [data.email, data.country_code || '+91', data.mobile || data.phone_number, passwordHash, 'ACTIVE']
-        );
-        const userId = userResult.insertId;
+    const [memberRows]: any = await db.query(
+      `SELECT m.id, m.member_id, m.full_name, m.status, m.profile_image, m.district_id, m.block_id, m.village_id, r.name AS role_name
+       FROM members m LEFT JOIN roles r ON m.role_id = r.id
+       WHERE m.user_id = ?`,
+      [userId]
+    );
+    const member = memberRows[0] || null;
 
-        await conn.query('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [userId, 6]);
-
-        const [memberResult]: any = await conn.query(
-          `INSERT INTO members (
-            user_id, full_name, father_name, date_of_birth, gender, email, mobile,
-            profile_photo, address_line1, address_line2, village, taluk_id, district_id,
-            state, pincode, membership_type_id, unit_id, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            userId, data.full_name, data.father_name, data.date_of_birth, data.gender,
-            data.email, data.mobile, data.profile_photo || null, data.address_line1,
-            data.address_line2 || null, data.village, data.taluk_id, data.district_id,
-            data.state || 'State', data.pincode, data.membership_type_id, data.unit_id, 'PENDING'
-          ]
-        );
-        const memberIdNum = memberResult.insertId;
-
-        const appNumber = `APP-${Date.now()}-${memberIdNum}`;
-        await conn.query(
-          'INSERT INTO membership_applications (member_id, application_number, status) VALUES (?, ?, ?)',
-          [memberIdNum, appNumber, 'PENDING']
-        );
-
-        await conn.commit();
-        conn.release();
-
-        return {
-          user_id: userId,
-          member_db_id: memberIdNum,
-          application_number: appNumber,
-          status: 'PENDING',
-          message: 'Membership application submitted successfully and is pending admin approval.',
-        };
-      } catch (err) {
-        await conn.rollback();
-        conn.release();
-        throw err;
-      }
-    } else {
-      const existing = mockDbStore.users.find(u => u.email === data.email || u.mobile === data.mobile);
-      if (existing) {
-        throw new Error('A member with this email or mobile number is already registered.');
-      }
-
-      const userId = mockDbStore.users.length + 1;
-      const memberIdNum = mockDbStore.members.length + 1;
-      const passwordHash = await bcrypt.hash(data.password, 10);
-
-      mockDbStore.users.push({
-        id: userId,
-        email: data.email,
-        mobile: data.mobile,
-        password_hash: passwordHash,
-        status: 'ACTIVE',
-        created_at: new Date()
-      });
-
-      mockDbStore.user_roles.push({ user_id: userId, role: 'MEMBER' });
-
-      mockDbStore.members.push({
-        id: memberIdNum,
-        user_id: userId,
-        member_id: null as any,
-        full_name: data.full_name,
-        father_name: data.father_name,
-        date_of_birth: data.date_of_birth,
-        gender: data.gender,
-        email: data.email,
-        mobile: data.mobile,
-        profile_photo: data.profile_photo || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400',
-        address_line1: data.address_line1,
-        address_line2: data.address_line2 || null,
-        village: data.village,
-        taluk_id: Number(data.taluk_id),
-        district_id: Number(data.district_id),
-        state: data.state || 'State',
-        pincode: data.pincode,
-        membership_type_id: Number(data.membership_type_id),
-        unit_id: Number(data.unit_id),
-        joining_date: null as any,
-        status: 'PENDING',
-        created_at: new Date().toISOString()
-      });
-
-      return {
-        user_id: userId,
-        member_db_id: memberIdNum,
-        application_number: `APP-${Date.now()}-${memberIdNum}`,
-        status: 'PENDING',
-        message: 'Membership application submitted successfully and is pending admin approval.',
-      };
-    }
+    return {
+      id: user.id,
+      email: user.email,
+      country_code: user.country_code,
+      phone_number: user.phone_number,
+      status: user.status,
+      roles,
+      role_names: roleNames,
+      member,
+    };
   }
 
   static async login(loginStr: string, passwordStr: string) {
     const db = await getDbConnection();
+    const login = String(loginStr || '').trim();
+    const phone = normalizePhone(login);
 
-    if (db) {
-      const [users]: any = await db.query(
-        'SELECT * FROM users WHERE email = ? OR phone_number = ?',
-        [loginStr, loginStr]
-      );
+    const [users]: any = await db.query(
+      'SELECT id, password_hash, status FROM users WHERE email = ? OR (? <> \'\' AND phone_number = ?) LIMIT 1',
+      [login.toLowerCase(), phone, phone]
+    );
 
-      if (users.length === 0) {
-        throw new Error('Invalid credentials');
-      }
-
-      const user = users[0];
-      const isMatch = await bcrypt.compare(passwordStr, user.password_hash);
-      if (!isMatch) {
-        throw new Error('Invalid credentials');
-      }
-
-      if (user.status !== 'ACTIVE') {
-        throw new Error(`Account is currently ${user.status}. Please contact administrator.`);
-      }
-
-      const [rolesRows]: any = await db.query(
-        `SELECT r.name FROM roles r 
-         JOIN user_roles ur ON r.id = ur.role_id 
-         WHERE ur.user_id = ?`,
-        [user.id]
-      );
-      const roles = rolesRows.map((r: any) => r.name);
-
-      const [membersRows]: any = await db.query(
-        'SELECT * FROM members WHERE user_id = ?',
-        [user.id]
-      );
-      const member = membersRows[0] || null;
-
-      const token = jwt.sign(
-        {
-          id: user.id,
-          email: user.email,
-          mobile: user.mobile,
-          roles,
-          member_id: member?.member_id || null,
-        },
-        JWT_SECRET,
-        { expiresIn: '7d' as any }
-      );
-
-      return {
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          mobile: user.mobile,
-          roles,
-          member: member ? {
-            id: member.id,
-            member_id: member.member_id,
-            full_name: member.full_name,
-            status: member.status,
-            profile_photo: member.profile_photo,
-            district_id: member.district_id,
-            taluk_id: member.taluk_id,
-            unit_id: member.unit_id
-          } : null
-        }
-      };
-    } else {
-      const user = mockDbStore.users.find(u => u.email === loginStr || u.mobile === loginStr);
-      if (!user) {
-        throw new Error('Invalid credentials');
-      }
-
-      const isMatch = await bcrypt.compare(passwordStr, user.password_hash);
-      if (!isMatch) {
-        throw new Error('Invalid credentials');
-      }
-
-      const userRoleEntry = mockDbStore.user_roles.filter(ur => ur.user_id === user.id);
-      const roles = userRoleEntry.map(r => r.role);
-      const member = mockDbStore.members.find(m => m.user_id === user.id) || null;
-
-      const token = jwt.sign(
-        {
-          id: user.id,
-          email: user.email,
-          mobile: user.mobile,
-          roles,
-          member_id: member?.member_id || null,
-        },
-        JWT_SECRET,
-        { expiresIn: '7d' as any }
-      );
-
-      return {
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          mobile: user.mobile,
-          roles,
-          member: member ? {
-            id: member.id,
-            member_id: member.member_id,
-            full_name: member.full_name,
-            status: member.status,
-            profile_photo: member.profile_photo,
-            district_id: member.district_id,
-            taluk_id: member.taluk_id,
-            unit_id: member.unit_id
-          } : null
-        }
-      };
+    const user = users[0];
+    const isMatch = user ? await bcrypt.compare(passwordStr, user.password_hash) : false;
+    if (!user || !isMatch) {
+      throw new HttpError(401, 'Invalid email/phone or password', 'INVALID_CREDENTIALS');
     }
+    if (user.status !== 'ACTIVE') {
+      throw new HttpError(403, `Your account is ${user.status.toLowerCase()}. Please contact the administrator.`, 'ACCOUNT_INACTIVE');
+    }
+
+    const sessionUser = await this.getSessionUser(user.id);
+    if (!sessionUser) {
+      throw new HttpError(401, 'Invalid email/phone or password', 'INVALID_CREDENTIALS');
+    }
+
+    const token = jwt.sign(
+      {
+        id: sessionUser.id,
+        email: sessionUser.email,
+        roles: sessionUser.roles,
+        member_db_id: sessionUser.member?.id || null,
+      },
+      JWT_SECRET,
+      { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any }
+    );
+
+    return { token, user: sessionUser };
+  }
+
+  static async changePassword(userId: number, currentPassword: string, newPassword: string) {
+    const db = await getDbConnection();
+    const [rows]: any = await db.query('SELECT password_hash FROM users WHERE id = ?', [userId]);
+    if (rows.length === 0) throw new HttpError(404, 'User not found', 'NOT_FOUND');
+
+    const ok = await bcrypt.compare(currentPassword, rows[0].password_hash);
+    if (!ok) throw new HttpError(400, 'Current password is incorrect', 'VALIDATION_ERROR', { field: 'current_password' });
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, userId]);
   }
 }
