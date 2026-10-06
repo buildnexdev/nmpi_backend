@@ -173,6 +173,9 @@ export async function getDbConnection() {
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
+      // Return DATE columns (e.g. date_of_birth) as 'YYYY-MM-DD' strings instead of JS Dates,
+      // which would otherwise be shifted by the server timezone when serialised to JSON.
+      dateStrings: ['DATE'],
     });
     
     // Quick connection sanity check

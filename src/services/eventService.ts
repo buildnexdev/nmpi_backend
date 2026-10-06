@@ -1,28 +1,40 @@
 import { getDbConnection, mockDbStore } from '../config/database';
 
 export class EventService {
-  static async getEvents(status?: string) {
+  static async getEvents(filters: any = {}) {
     const db = await getDbConnection();
+    const status = typeof filters === 'string' ? filters : filters?.status;
+    const upcoming = typeof filters === 'object' && filters?.upcoming;
+    const limit = typeof filters === 'object' ? Number(filters?.limit) : 0;
     if (db) {
-      let query = 'SELECT * FROM events WHERE 1=1';
+      let query = 'SELECT * FROM tblEvents WHERE 1=1';
       const params: any[] = [];
       if (status) {
         query += ' AND status = ?';
         params.push(status);
+      } else if (upcoming) {
+        query += " AND status = 'UPCOMING' AND event_date >= CURDATE()";
       }
       query += ' ORDER BY event_date ASC';
+      if (Number.isInteger(limit) && limit > 0) {
+        query += ' LIMIT ?';
+        params.push(limit);
+      }
       const [rows]: any = await db.query(query, params);
       return rows;
     } else {
-      if (status) return mockDbStore.events.filter(e => e.status === status);
-      return mockDbStore.events;
+      let list = [...mockDbStore.events];
+      if (status) list = list.filter(e => e.status === status);
+      else if (upcoming) list = list.filter(e => e.status === 'UPCOMING');
+      if (Number.isInteger(limit) && limit > 0) list = list.slice(0, limit);
+      return list;
     }
   }
 
   static async getEventById(idOrSlug: string | number) {
     const db = await getDbConnection();
     if (db) {
-      const [rows]: any = await db.query('SELECT * FROM events WHERE id = ? OR slug = ?', [idOrSlug, idOrSlug]);
+      const [rows]: any = await db.query('SELECT * FROM tblEvents WHERE id = ? OR slug = ?', [idOrSlug, idOrSlug]);
       return rows[0] || null;
     } else {
       return mockDbStore.events.find(e => e.id === Number(idOrSlug) || e.slug === String(idOrSlug)) || null;
@@ -35,13 +47,15 @@ export class EventService {
 
     if (db) {
       const [res]: any = await db.query(
-        `INSERT INTO events (organizer_id, title, slug, description, location, venue_address, event_date, start_time, end_time, cover_image, capacity, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tblEvents (organizer_id, title, title_ta, slug, description, description_ta, location, venue_address, event_date, start_time, end_time, cover_image, capacity, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           organizerId,
           data.title,
+          data.title_ta || null,
           slug,
           data.description,
+          data.description_ta || null,
           data.location,
           data.venue_address,
           data.event_date,
@@ -72,5 +86,39 @@ export class EventService {
       mockDbStore.events.unshift(newObj as any);
       return newObj;
     }
+  }
+
+  static async updateEvent(id: number, data: any) {
+    const db = await getDbConnection();
+    if (!db) throw new Error('Database connection unavailable.');
+    const existing = await this.getEventById(id);
+    if (!existing) return null;
+    await db.query(
+      `UPDATE tblEvents SET title=?, title_ta=?, description=?, description_ta=?, location=?, venue_address=?, event_date=?, start_time=?, end_time=?, cover_image=?, capacity=?, status=?
+       WHERE id=?`,
+      [
+        data.title ?? existing.title,
+        data.title_ta ?? existing.title_ta ?? null,
+        data.description ?? existing.description,
+        data.description_ta ?? existing.description_ta ?? null,
+        data.location ?? existing.location,
+        data.venue_address !== undefined ? data.venue_address : existing.venue_address,
+        data.event_date ?? existing.event_date,
+        data.start_time ?? existing.start_time,
+        data.end_time !== undefined ? data.end_time : existing.end_time,
+        data.cover_image !== undefined ? data.cover_image : existing.cover_image,
+        data.capacity ?? existing.capacity,
+        data.status ?? existing.status,
+        id,
+      ]
+    );
+    return this.getEventById(id);
+  }
+
+  static async deleteEvent(id: number) {
+    const db = await getDbConnection();
+    if (!db) throw new Error('Database connection unavailable.');
+    const [res]: any = await db.query('DELETE FROM tblEvents WHERE id = ?', [id]);
+    return res.affectedRows > 0;
   }
 }

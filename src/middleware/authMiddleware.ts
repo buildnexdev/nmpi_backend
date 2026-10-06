@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../types';
 import { sendError } from '../utils/response';
 import { ERROR_CODES, HTTP_STATUS } from '../constants';
+import { normalizeRoleCodes } from '../utils/roles';
 
 export function authenticateJWT(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -20,7 +21,7 @@ export function authenticateJWT(req: AuthRequest, res: Response, next: NextFunct
       id: decoded.id,
       email: decoded.email,
       mobile: decoded.mobile,
-      roles: decoded.roles || [],
+      roles: normalizeRoleCodes(decoded.roles || []),
       permissions: decoded.permissions || [],
       member_id: decoded.member_id || null,
     };

@@ -17,6 +17,8 @@ const eventRoutes_1 = __importDefault(require("./routes/eventRoutes"));
 const verifyRoutes_1 = __importDefault(require("./routes/verifyRoutes"));
 const dashboardRoutes_1 = __importDefault(require("./routes/dashboardRoutes"));
 const cmsRoutes_1 = __importDefault(require("./routes/cmsRoutes"));
+const accessRoutes_1 = __importDefault(require("./routes/accessRoutes"));
+const uploadRoutes_1 = __importDefault(require("./routes/uploadRoutes"));
 const errorHandler_1 = require("./middleware/errorHandler");
 const app = (0, express_1.default)();
 // Security and Logging Middlewares
@@ -46,6 +48,8 @@ app.use('/api/news', newsRoutes_1.default);
 app.use('/api/events', eventRoutes_1.default);
 app.use('/api/verify', verifyRoutes_1.default);
 app.use('/api/dashboard', dashboardRoutes_1.default);
+app.use('/api/access', accessRoutes_1.default);
+app.use('/api/uploads', uploadRoutes_1.default);
 app.use('/api', cmsRoutes_1.default);
 // 404 Route Fallback
 app.use((req, res) => {

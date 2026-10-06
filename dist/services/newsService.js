@@ -7,10 +7,9 @@ class NewsService {
         const db = await (0, database_1.getDbConnection)();
         if (db) {
             let query = `
-        SELECT n.*, nc.name as category_name, u.email as author_email
-        FROM news n
-        LEFT JOIN news_categories nc ON n.category_id = nc.id
-        LEFT JOIN users u ON n.author_id = u.id
+        SELECT n.*, n.category as category_name, u.email as author_email
+        FROM tblNews n
+        LEFT JOIN tblUsers u ON n.author_id = u.id
         WHERE 1=1
       `;
             const params = [];
@@ -22,15 +21,20 @@ class NewsService {
                 query += ' AND n.is_featured = ?';
                 params.push(filters.is_featured ? 1 : 0);
             }
-            if (filters.category_id) {
-                query += ' AND n.category_id = ?';
-                params.push(filters.category_id);
+            if (filters.category) {
+                query += ' AND n.category = ?';
+                params.push(filters.category);
             }
             if (filters.search) {
                 query += ' AND (n.title LIKE ? OR n.summary LIKE ?)';
                 params.push(`%${filters.search}%`, `%${filters.search}%`);
             }
             query += ' ORDER BY n.published_at DESC';
+            const limit = Number(filters.limit);
+            if (Number.isInteger(limit) && limit > 0) {
+                query += ' LIMIT ?';
+                params.push(limit);
+            }
             const [rows] = await db.query(query, params);
             return rows;
         }
@@ -44,15 +48,17 @@ class NewsService {
                 const term = filters.search.toLowerCase();
                 list = list.filter(n => n.title.toLowerCase().includes(term) || n.summary.toLowerCase().includes(term));
             }
+            const limit = Number(filters.limit);
+            if (Number.isInteger(limit) && limit > 0)
+                list = list.slice(0, limit);
             return list;
         }
     }
     static async getNewsById(idOrSlug) {
         const db = await (0, database_1.getDbConnection)();
         if (db) {
-            const [rows] = await db.query(`SELECT n.*, nc.name as category_name 
-         FROM news n 
-         LEFT JOIN news_categories nc ON n.category_id = nc.id 
+            const [rows] = await db.query(`SELECT n.*, n.category as category_name
+         FROM tblNews n
          WHERE n.id = ? OR n.slug = ?`, [idOrSlug, idOrSlug]);
             return rows[0] || null;
         }
@@ -64,14 +70,17 @@ class NewsService {
         const db = await (0, database_1.getDbConnection)();
         const slug = data.slug || data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
         if (db) {
-            const [res] = await db.query(`INSERT INTO news (category_id, author_id, title, slug, summary, content, cover_image, is_featured, status, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`, [
-                data.category_id || 1,
+            const [res] = await db.query(`INSERT INTO tblNews (category, author_id, title, title_ta, slug, summary, summary_ta, content, content_ta, cover_image, is_featured, status, published_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`, [
+                data.category || 'Announcement',
                 authorId,
                 data.title,
+                data.title_ta || null,
                 slug,
                 data.summary,
+                data.summary_ta || null,
                 data.content,
+                data.content_ta || null,
                 data.cover_image || null,
                 data.is_featured ? 1 : 0,
                 data.status || 'PUBLISHED'
@@ -97,6 +106,38 @@ class NewsService {
             database_1.mockDbStore.news.unshift(newObj);
             return newObj;
         }
+    }
+    static async updateNews(id, data) {
+        const db = await (0, database_1.getDbConnection)();
+        if (!db)
+            throw new Error('Database connection unavailable.');
+        const existing = await this.getNewsById(id);
+        if (!existing)
+            return null;
+        const slug = data.slug || existing.slug;
+        await db.query(`UPDATE tblNews SET category=?, title=?, title_ta=?, slug=?, summary=?, summary_ta=?, content=?, content_ta=?, cover_image=?, is_featured=?, status=?
+       WHERE id=?`, [
+            data.category || existing.category || 'Announcement',
+            data.title ?? existing.title,
+            data.title_ta ?? existing.title_ta ?? null,
+            slug,
+            data.summary ?? existing.summary,
+            data.summary_ta ?? existing.summary_ta ?? null,
+            data.content ?? existing.content,
+            data.content_ta ?? existing.content_ta ?? null,
+            data.cover_image !== undefined ? data.cover_image : existing.cover_image,
+            data.is_featured ? 1 : 0,
+            data.status || existing.status,
+            id,
+        ]);
+        return this.getNewsById(id);
+    }
+    static async deleteNews(id) {
+        const db = await (0, database_1.getDbConnection)();
+        if (!db)
+            throw new Error('Database connection unavailable.');
+        const [res] = await db.query('DELETE FROM tblNews WHERE id = ?', [id]);
+        return res.affectedRows > 0;
     }
 }
 exports.NewsService = NewsService;

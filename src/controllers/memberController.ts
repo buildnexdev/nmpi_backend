@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { MemberService } from '../services/memberService';
+import fs from 'fs';
+import { MemberService, normalizeRegistrationInput } from '../services/memberService';
 import { sendSuccess, sendError } from '../utils/response';
 import { generateMemberIdCardPdf } from '../services/pdfIdCardService';
 import { AuthRequest } from '../types';
@@ -13,6 +14,19 @@ export async function checkPhone(req: Request, res: Response, next: NextFunction
     }
     const exists = await MemberService.checkPhone(countryCode, phone);
     return sendSuccess(res, exists ? 'Phone number is already registered' : 'Phone number is available', { exists });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function checkEmail(req: Request, res: Response, next: NextFunction) {
+  try {
+    const email = String(req.query.email || '').trim().toLowerCase();
+    if (!email) {
+      return sendError(res, 'Email address is required', 'VALIDATION_ERROR', 400);
+    }
+    const exists = await MemberService.checkEmail(email);
+    return sendSuccess(res, exists ? 'Email address is already registered' : 'Email address is available', { exists });
   } catch (err) {
     next(err);
   }
@@ -44,27 +58,38 @@ export async function checkVoterId(req: Request, res: Response, next: NextFuncti
   }
 }
 
-export async function registerMember(req: Request, res: Response, next: NextFunction) {
-  try {
-    const profileFile = req.file;
-    const data = req.body;
+/** Remove a multer-saved upload when the registration it belonged to did not go through. */
+function discardUpload(file?: Express.Multer.File) {
+  if (!file?.path) return;
+  fs.promises.unlink(file.path).catch(() => undefined);
+}
 
-    // Standard basic field validations
-    if (!data.full_name || !data.father_name || !data.date_of_birth || !data.gender || !data.phone_number || !data.email || !data.password) {
-      return sendError(res, 'All required personal fields must be provided.', 'VALIDATION_ERROR', 400);
-    }
-    if (!data.aadhaar_number || !data.voter_id || !data.parliament_constituency_id || !data.district_id || !data.block_id) {
-      return sendError(res, 'All required location & identity fields must be provided.', 'VALIDATION_ERROR', 400);
-    }
+export async function registerMember(req: Request, res: Response, next: NextFunction) {
+  const profileFile = req.file;
+  try {
+    const data = req.body || {};
+
+    // Validate & normalise before touching the database (throws FieldError on first problem)
+    normalizeRegistrationInput(data);
 
     const newMember = await MemberService.registerMember(data, profileFile);
     return sendSuccess(res, 'Member registered successfully!', newMember, 201);
   } catch (err: any) {
-    if (err.field && err.message) {
-      return sendError(res, err.message, 'DUPLICATE_ERROR', 400, { field: err.field });
+    discardUpload(profileFile);
+    if (err && err.field && err.message) {
+      const code = /already registered/i.test(err.message) ? 'DUPLICATE_ERROR' : 'VALIDATION_ERROR';
+      return sendError(res, err.message, code, 400, { field: err.field });
     }
     next(err);
   }
+}
+
+async function streamIdCardPdf(res: Response, memberData: any) {
+  const pdfBuffer = await generateMemberIdCardPdf(memberData);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="Digital_ID_Card_${memberData.member_id}.pdf"`);
+  res.setHeader('Content-Length', pdfBuffer.length);
+  return res.end(pdfBuffer);
 }
 
 export async function downloadIdCardPdf(req: Request, res: Response, next: NextFunction) {
@@ -74,12 +99,24 @@ export async function downloadIdCardPdf(req: Request, res: Response, next: NextF
     if (!memberData) {
       return sendError(res, 'Member record not found.', 'NOT_FOUND', 404);
     }
+    return await streamIdCardPdf(res, memberData);
+  } catch (err) {
+    next(err);
+  }
+}
 
-    const pdfBuffer = await generateMemberIdCardPdf(memberData);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Digital_ID_Card_${memberData.member_id || memberId}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    return res.end(pdfBuffer);
+/** GET /members/id-card/download?token=TOKEN-... — used right after registration (no login yet). */
+export async function downloadIdCardByToken(req: Request, res: Response, next: NextFunction) {
+  try {
+    const token = String(req.query.token || '').trim();
+    if (!token) {
+      return sendError(res, 'Download token is required.', 'VALIDATION_ERROR', 400);
+    }
+    const memberData = await MemberService.getMemberByVerificationToken(token);
+    if (!memberData) {
+      return sendError(res, 'The download link is invalid or has expired.', 'NOT_FOUND', 404);
+    }
+    return await streamIdCardPdf(res, memberData);
   } catch (err) {
     next(err);
   }
@@ -110,9 +147,42 @@ export async function getMembers(req: AuthRequest, res: Response, next: NextFunc
 export async function getMemberById(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return sendError(res, 'Member not found', 'NOT_FOUND', 404);
+    }
     const member = await MemberService.getMemberById(id);
     if (!member) return sendError(res, 'Member not found', 'NOT_FOUND', 404);
     return sendSuccess(res, 'Member retrieved successfully', member);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getMyProfile(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = Number(req.user?.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return sendError(res, 'Authorization token required', 'UNAUTHORIZED', 401);
+    }
+    const profile = await MemberService.getMyProfile(userId);
+    if (!profile) return sendError(res, 'No membership record is linked to this account', 'NOT_FOUND', 404);
+    return sendSuccess(res, 'Member profile retrieved', profile);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function downloadMyIdCard(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = Number(req.user?.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return sendError(res, 'Authorization token required', 'UNAUTHORIZED', 401);
+    }
+    const member = await MemberService.getMemberById(userId);
+    if (!member) return sendError(res, 'No membership record is linked to this account', 'NOT_FOUND', 404);
+    const memberData = await MemberService.getMemberForIdCard(member.id);
+    if (!memberData) return sendError(res, 'Member record not found.', 'NOT_FOUND', 404);
+    return await streamIdCardPdf(res, memberData);
   } catch (err) {
     next(err);
   }

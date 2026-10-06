@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/authService';
 import { sendSuccess, sendError } from '../utils/response';
-import { memberRegisterSchema, loginSchema } from '../validators/authValidator';
+import { memberRegisterSchema, loginSchema, changePasswordSchema } from '../validators/authValidator';
 
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
@@ -26,8 +26,26 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
 export async function getMe(req: any, res: Response, next: NextFunction) {
   try {
-    return sendSuccess(res, 'Current user retrieved', req.user);
+    const session = await AuthService.getSessionUser(Number(req.user?.id));
+    if (!session) return sendError(res, 'Account not found', 'NOT_FOUND', 404);
+    return sendSuccess(res, 'Current user retrieved', session);
   } catch (err: any) {
     next(err);
+  }
+}
+
+export async function changePassword(req: any, res: Response, next: NextFunction) {
+  try {
+    await changePasswordSchema.validate(req.body, { abortEarly: false });
+    const userId = Number(req.user?.id);
+    await AuthService.changePassword(userId, req.body.current_password, req.body.new_password);
+    return sendSuccess(res, 'Password updated.', { ok: true });
+  } catch (err: any) {
+    if (err.name === 'ValidationError') {
+      return sendError(res, err.message || 'Validation error', 'VALIDATION_ERROR', 400);
+    }
+    const msg = err.message || 'Could not update password';
+    const status = /incorrect/i.test(msg) ? 400 : 400;
+    return sendError(res, msg, 'VALIDATION_ERROR', status);
   }
 }
