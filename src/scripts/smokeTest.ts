@@ -215,11 +215,11 @@ async function main() {
     if (created.leaderId) await call('DELETE', `/leadership/${created.leaderId}`, { token: t });
     if (created.upload) await call('DELETE', `/uploads/${encodeURIComponent(created.upload)}`, { token: t });
     if (created.userId) {
-      const [rows]: any = await db.query('SELECT profile_image FROM members WHERE user_id = ?', [created.userId]);
-      await db.query('DELETE FROM member_qr_codes WHERE member_id IN (SELECT id FROM members WHERE user_id = ?)', [created.userId]);
-      await db.query('DELETE FROM members WHERE user_id = ?', [created.userId]);
-      await db.query('DELETE FROM user_roles WHERE user_id = ?', [created.userId]);
-      await db.query('DELETE FROM users WHERE id = ?', [created.userId]);
+      const [rows]: any = await db.query('SELECT profile_image FROM tblMembers WHERE user_id = ?', [created.userId]);
+      await db.query('DELETE FROM tblMember_qr_codes WHERE member_id IN (SELECT id FROM tblMembers WHERE user_id = ?)', [created.userId]);
+      await db.query('DELETE FROM tblMembers WHERE user_id = ?', [created.userId]);
+      await db.query('DELETE FROM tblUser_roles WHERE user_id = ?', [created.userId]);
+      await db.query('DELETE FROM tblUsers WHERE id = ?', [created.userId]);
       console.log(`  removed test user #${created.userId}${rows[0]?.profile_image ? ' (with photo)' : ''}`);
     }
     await db.end();

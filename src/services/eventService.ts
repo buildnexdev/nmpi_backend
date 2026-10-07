@@ -24,7 +24,7 @@ function validate(data: any) {
 export class EventService {
   static async list(filters: any, includeAll: boolean) {
     const db = await getDbConnection();
-    let query = 'SELECT * FROM events WHERE 1=1';
+    let query = 'SELECT * FROM tblEvents WHERE 1=1';
     const params: any[] = [];
 
     if (STATUSES.includes(filters.status)) {
@@ -46,7 +46,7 @@ export class EventService {
 
   static async get(idOrSlug: string) {
     const db = await getDbConnection();
-    const [rows]: any = await db.query('SELECT * FROM events WHERE id = ? OR slug = ? LIMIT 1', [Number(idOrSlug) || 0, idOrSlug]);
+    const [rows]: any = await db.query('SELECT * FROM tblEvents WHERE id = ? OR slug = ? LIMIT 1', [Number(idOrSlug) || 0, idOrSlug]);
     return rows[0] || null;
   }
 
@@ -54,7 +54,7 @@ export class EventService {
     validate(data);
     const db = await getDbConnection();
     const [res]: any = await db.query(
-      `INSERT INTO events (organizer_id, title, title_ta, slug, description, description_ta, location, venue_address,
+      `INSERT INTO tblEvents (organizer_id, title, title_ta, slug, description, description_ta, location, venue_address,
          event_date, start_time, end_time, cover_image, capacity, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -85,7 +85,7 @@ export class EventService {
 
     const db = await getDbConnection();
     await db.query(
-      `UPDATE events SET title = ?, title_ta = ?, description = ?, description_ta = ?, location = ?, venue_address = ?,
+      `UPDATE tblEvents SET title = ?, title_ta = ?, description = ?, description_ta = ?, location = ?, venue_address = ?,
          event_date = ?, start_time = ?, end_time = ?, cover_image = ?, capacity = ?, status = ? WHERE id = ?`,
       [
         String(merged.title).trim(),
@@ -108,41 +108,7 @@ export class EventService {
 
   static async remove(id: number) {
     const db = await getDbConnection();
-    const [res]: any = await db.query('DELETE FROM events WHERE id = ?', [id]);
-    if (res.affectedRows === 0) throw new HttpError(404, 'Event not found', 'NOT_FOUND');
-  }
-
-  static async updateEvent(id: number, data: any) {
-    const db = await getDbConnection();
-    if (!db) throw new Error('Database connection unavailable.');
-    const existing = await this.getEventById(id);
-    if (!existing) return null;
-    await db.query(
-      `UPDATE tblEvents SET title=?, title_ta=?, description=?, description_ta=?, location=?, venue_address=?, event_date=?, start_time=?, end_time=?, cover_image=?, capacity=?, status=?
-       WHERE id=?`,
-      [
-        data.title ?? existing.title,
-        data.title_ta ?? existing.title_ta ?? null,
-        data.description ?? existing.description,
-        data.description_ta ?? existing.description_ta ?? null,
-        data.location ?? existing.location,
-        data.venue_address !== undefined ? data.venue_address : existing.venue_address,
-        data.event_date ?? existing.event_date,
-        data.start_time ?? existing.start_time,
-        data.end_time !== undefined ? data.end_time : existing.end_time,
-        data.cover_image !== undefined ? data.cover_image : existing.cover_image,
-        data.capacity ?? existing.capacity,
-        data.status ?? existing.status,
-        id,
-      ]
-    );
-    return this.getEventById(id);
-  }
-
-  static async deleteEvent(id: number) {
-    const db = await getDbConnection();
-    if (!db) throw new Error('Database connection unavailable.');
     const [res]: any = await db.query('DELETE FROM tblEvents WHERE id = ?', [id]);
-    return res.affectedRows > 0;
+    if (res.affectedRows === 0) throw new HttpError(404, 'Event not found', 'NOT_FOUND');
   }
 }

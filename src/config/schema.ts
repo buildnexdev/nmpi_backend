@@ -1,7 +1,7 @@
 import { Pool, PoolConnection } from 'mysql2/promise';
 
 const TABLES: string[] = [
-  `CREATE TABLE IF NOT EXISTS \`news\` (
+  `CREATE TABLE IF NOT EXISTS \`tblNews\` (
     \`id\` INT AUTO_INCREMENT PRIMARY KEY,
     \`author_id\` INT NULL,
     \`category\` VARCHAR(100) NOT NULL DEFAULT 'Announcement',
@@ -21,7 +21,7 @@ const TABLES: string[] = [
     INDEX \`idx_news_status\` (\`status\`, \`published_at\`)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
-  `CREATE TABLE IF NOT EXISTS \`events\` (
+  `CREATE TABLE IF NOT EXISTS \`tblEvents\` (
     \`id\` INT AUTO_INCREMENT PRIMARY KEY,
     \`organizer_id\` INT NULL,
     \`title\` VARCHAR(255) NOT NULL,
@@ -43,7 +43,7 @@ const TABLES: string[] = [
     INDEX \`idx_events_status\` (\`status\`)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
-  `CREATE TABLE IF NOT EXISTS \`leaders\` (
+  `CREATE TABLE IF NOT EXISTS \`tblLeaders\` (
     \`id\` INT AUTO_INCREMENT PRIMARY KEY,
     \`name\` VARCHAR(150) NOT NULL,
     \`name_ta\` VARCHAR(150) NULL,
@@ -62,7 +62,7 @@ const TABLES: string[] = [
     \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
-  `CREATE TABLE IF NOT EXISTS \`organization_pages\` (
+  `CREATE TABLE IF NOT EXISTS \`tblOrganization_pages\` (
     \`id\` INT AUTO_INCREMENT PRIMARY KEY,
     \`page_key\` VARCHAR(50) NOT NULL UNIQUE,
     \`title\` VARCHAR(255) NOT NULL,
@@ -125,12 +125,12 @@ async function createAndSeed(db: PoolConnection): Promise<void> {
     await db.query(ddl);
   }
 
-  const [[leaderCount]]: any = await db.query('SELECT COUNT(*) AS c FROM leaders');
+  const [[leaderCount]]: any = await db.query('SELECT COUNT(*) AS c FROM tblLeaders');
   if (Number(leaderCount.c) === 0) {
     let order = 1;
     for (const [name, nameTa, district, districtTa, qualification] of SEED_LEADERS) {
       await db.query(
-        `INSERT INTO leaders (name, name_ta, designation, designation_ta, district, district_ta, qualification, display_order)
+        `INSERT INTO tblLeaders (name, name_ta, designation, designation_ta, district, district_ta, qualification, display_order)
          VALUES (?, ?, 'District Secretary', 'மாவட்டச் செயலாளர்', ?, ?, ?, ?)`,
         [name, nameTa, district, districtTa, qualification, order++]
       );
@@ -139,7 +139,7 @@ async function createAndSeed(db: PoolConnection): Promise<void> {
 
   for (const p of SEED_PAGES) {
     await db.query(
-      `INSERT IGNORE INTO organization_pages (page_key, title, title_ta, content, content_ta) VALUES (?, ?, ?, ?, ?)`,
+      `INSERT IGNORE INTO tblOrganization_pages (page_key, title, title_ta, content, content_ta) VALUES (?, ?, ?, ?, ?)`,
       [p.key, p.title, p.title_ta, p.content, p.content_ta]
     );
   }

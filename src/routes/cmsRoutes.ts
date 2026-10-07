@@ -33,7 +33,7 @@ router.get('/pages/:key', getPage);
 router.put('/pages/:key', ...admins, savePage);
 
 router.get('/uploads/list', listUploads);
-router.post('/uploads', ...admins, uploadMediaImage.single('file'), uploadMedia);
+router.post('/uploads', ...admins, uploadMediaImage.single('file') as any, uploadMedia);
 router.delete('/uploads/:filename', ...admins, deleteUpload);
 
 export default router;

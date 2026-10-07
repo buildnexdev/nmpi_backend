@@ -27,7 +27,7 @@ router.get('/check-phone', checkPhone);
 router.get('/check-email', checkEmail);
 router.get('/check-aadhaar', checkAadhaar);
 router.get('/check-voter-id', checkVoterId);
-router.post('/register', uploadProfileImage.single('profile_image'), registerMember);
+router.post('/register', uploadProfileImage.single('profile_image') as any, registerMember);
 router.get('/id-card/download', downloadIdCardWithToken);
 
 // Logged-in member

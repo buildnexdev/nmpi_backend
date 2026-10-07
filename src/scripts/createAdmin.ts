@@ -24,22 +24,22 @@ async function main() {
   const db = createPool();
   const hash = await bcrypt.hash(password, 10);
 
-  const [existing]: any = await db.query('SELECT id FROM users WHERE email = ? OR phone_number = ?', [email, phone]);
+  const [existing]: any = await db.query('SELECT id FROM tblUsers WHERE email = ? OR phone_number = ?', [email, phone]);
   let userId: number;
   if (existing.length > 0) {
     userId = existing[0].id;
-    await db.query("UPDATE users SET password_hash = ?, status = 'ACTIVE' WHERE id = ?", [hash, userId]);
+    await db.query("UPDATE tblUsers SET password_hash = ?, status = 'ACTIVE' WHERE id = ?", [hash, userId]);
     console.log(`Existing user #${userId} found; password reset and promoted to Super Admin.`);
   } else {
     const [res]: any = await db.query(
-      "INSERT INTO users (email, country_code, phone_number, password_hash, status) VALUES (?, '+91', ?, ?, 'ACTIVE')",
+      "INSERT INTO tblUsers (email, country_code, phone_number, password_hash, status) VALUES (?, '+91', ?, ?, 'ACTIVE')",
       [email, phone, hash]
     );
     userId = res.insertId;
     console.log(`Created user #${userId}.`);
   }
 
-  await db.query('INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)', [userId, ROLE_IDS.SUPER_ADMIN]);
+  await db.query('INSERT IGNORE INTO tblUser_roles (user_id, role_id) VALUES (?, ?)', [userId, ROLE_IDS.SUPER_ADMIN]);
   console.log(`Super Admin ready. Log in to the admin portal with: ${email}`);
   await db.end();
 }

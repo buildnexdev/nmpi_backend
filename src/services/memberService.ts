@@ -15,13 +15,13 @@ export interface StaffScope {
 }
 
 const DETAIL_JOINS = `
-  LEFT JOIN parliament_constituencies pc ON m.parliament_constituency_id = pc.id
-  LEFT JOIN assembly_constituencies ac ON m.assembly_constituency_id = ac.id
-  LEFT JOIN districts d ON m.district_id = d.id
-  LEFT JOIN blocks b ON m.block_id = b.id
-  LEFT JOIN villages v ON m.village_id = v.id
-  LEFT JOIN roles r ON m.role_id = r.id
-  LEFT JOIN member_qr_codes qr ON qr.member_id = m.id
+  LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
+  LEFT JOIN tblAssembly_constituencies ac ON m.assembly_constituency_id = ac.id
+  LEFT JOIN tblDistricts d ON m.district_id = d.id
+  LEFT JOIN tblBlocks b ON m.block_id = b.id
+  LEFT JOIN tblVillages v ON m.village_id = v.id
+  LEFT JOIN tblRoles r ON m.role_id = r.id
+  LEFT JOIN tblMember_qr_codes qr ON qr.member_id = m.id
 `;
 
 const DETAIL_COLUMNS = `
@@ -76,7 +76,7 @@ export class MemberService {
     if (user.roles.includes(ROLES.SUPER_ADMIN) || user.roles.includes(ROLES.ADMIN)) return null;
 
     const db = await getDbConnection();
-    const [rows]: any = await db.query('SELECT district_id, block_id, village_id FROM members WHERE user_id = ?', [user.id]);
+    const [rows]: any = await db.query('SELECT district_id, block_id, village_id FROM tblMembers WHERE user_id = ?', [user.id]);
     const own = rows[0];
     if (!own) return { column: 'm.id', value: -1 };
 
@@ -92,7 +92,7 @@ export class MemberService {
     const db = await getDbConnection();
     const cleanPhone = normalizePhone(phone);
     const [rows]: any = await db.query(
-      'SELECT id FROM users WHERE phone_number = ? UNION SELECT id FROM members WHERE country_code = ? AND phone_number = ? LIMIT 1',
+      'SELECT id FROM tblUsers WHERE phone_number = ? UNION SELECT id FROM tblMembers WHERE country_code = ? AND phone_number = ? LIMIT 1',
       [cleanPhone, (countryCode || '+91').trim(), cleanPhone]
     );
     return rows.length > 0;
@@ -100,13 +100,13 @@ export class MemberService {
 
   static async checkEmail(email: string): Promise<boolean> {
     const db = await getDbConnection();
-    const [rows]: any = await db.query('SELECT id FROM users WHERE email = ? LIMIT 1', [String(email).trim().toLowerCase()]);
+    const [rows]: any = await db.query('SELECT id FROM tblUsers WHERE email = ? LIMIT 1', [String(email).trim().toLowerCase()]);
     return rows.length > 0;
   }
 
   static async checkAadhaar(aadhaar: string): Promise<boolean> {
     const db = await getDbConnection();
-    const [rows]: any = await db.query('SELECT id FROM members WHERE aadhaar_hash = ?', [
+    const [rows]: any = await db.query('SELECT id FROM tblMembers WHERE aadhaar_hash = ?', [
       hashSensitiveData(aadhaar.replace(/\s+/g, '')),
     ]);
     return rows.length > 0;
@@ -114,7 +114,7 @@ export class MemberService {
 
   static async checkVoterId(voterId: string): Promise<boolean> {
     const db = await getDbConnection();
-    const [rows]: any = await db.query('SELECT id FROM members WHERE voter_id_hash = ?', [
+    const [rows]: any = await db.query('SELECT id FROM tblMembers WHERE voter_id_hash = ?', [
       hashSensitiveData(voterId.replace(/\s+/g, '').toUpperCase()),
     ]);
     return rows.length > 0;
@@ -181,7 +181,7 @@ export class MemberService {
       }
     }
 
-    const [parlRows]: any = await db.query('SELECT code FROM parliament_constituencies WHERE id = ?', [data.parliament_constituency_id]);
+    const [parlRows]: any = await db.query('SELECT code FROM tblParliament_constituencies WHERE id = ?', [data.parliament_constituency_id]);
     if (parlRows.length === 0) throw fieldError('parliament_constituency_id', 'Invalid parliament constituency');
     const parliamentCode = parlRows[0].code || 'TN';
 
@@ -194,12 +194,12 @@ export class MemberService {
 
       const [userResult]: any = await conn.query(
         `INSERT INTO tblUsers (email, country_code, phone_number, password_hash, status) VALUES (?, ?, ?, ?, 'ACTIVE')`,
-        [input.email, input.countryCode, input.phoneNumber, passwordHash]
+        [email, countryCode, phoneNumber, passwordHash]
       );
       const userId = userResult.insertId;
 
       // System access is always "Member"; coordinator/admin access is granted by an administrator.
-      await conn.query('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [userId, ROLE_IDS.MEMBER]);
+      await conn.query('INSERT INTO tblUser_roles (user_id, role_id) VALUES (?, ?)', [userId, ROLE_IDS.MEMBER]);
 
       const memberIdCode = generateMemberId(userId, parliamentCode);
 
@@ -241,7 +241,7 @@ export class MemberService {
       const memberDbId = memberResult.insertId;
 
       const verificationToken = `TOKEN-${crypto.randomBytes(16).toString('hex').toUpperCase()}`;
-      await conn.query('INSERT INTO member_qr_codes (member_id, verification_token) VALUES (?, ?)', [memberDbId, verificationToken]);
+      await conn.query('INSERT INTO tblMember_qr_codes (member_id, verification_token) VALUES (?, ?)', [memberDbId, verificationToken]);
 
       await conn.commit();
 
@@ -266,14 +266,14 @@ export class MemberService {
         d.name_en AS district_name, d.name_ta AS district_name_ta,
         b.name_en AS block_name, b.name_ta AS block_name_ta,
         v.name_en AS village_name, r.name AS role_name
-      FROM member_qr_codes qr
-      JOIN members m ON qr.member_id = m.id
-      LEFT JOIN parliament_constituencies pc ON m.parliament_constituency_id = pc.id
-      LEFT JOIN assembly_constituencies ac ON m.assembly_constituency_id = ac.id
-      LEFT JOIN districts d ON m.district_id = d.id
-      LEFT JOIN blocks b ON m.block_id = b.id
-      LEFT JOIN villages v ON m.village_id = v.id
-      LEFT JOIN roles r ON m.role_id = r.id
+      FROM tblMember_qr_codes qr
+      JOIN tblMembers m ON qr.member_id = m.id
+      LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
+      LEFT JOIN tblAssembly_constituencies ac ON m.assembly_constituency_id = ac.id
+      LEFT JOIN tblDistricts d ON m.district_id = d.id
+      LEFT JOIN tblBlocks b ON m.block_id = b.id
+      LEFT JOIN tblVillages v ON m.village_id = v.id
+      LEFT JOIN tblRoles r ON m.role_id = r.id
       WHERE qr.verification_token = ?`,
       [token]
     );
@@ -311,11 +311,11 @@ export class MemberService {
     }
 
     const baseQuery = `
-      FROM members m
-      LEFT JOIN districts d ON m.district_id = d.id
-      LEFT JOIN blocks b ON m.block_id = b.id
-      LEFT JOIN parliament_constituencies pc ON m.parliament_constituency_id = pc.id
-      LEFT JOIN roles r ON m.role_id = r.id
+      FROM tblMembers m
+      LEFT JOIN tblDistricts d ON m.district_id = d.id
+      LEFT JOIN tblBlocks b ON m.block_id = b.id
+      LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
+      LEFT JOIN tblRoles r ON m.role_id = r.id
       ${where}`;
 
     const columns = `
@@ -345,7 +345,7 @@ export class MemberService {
 
   static async getMemberById(id: number, scope: StaffScope | null) {
     const db = await getDbConnection();
-    let query = `SELECT ${DETAIL_COLUMNS} FROM members m ${DETAIL_JOINS} WHERE m.id = ?`;
+    let query = `SELECT ${DETAIL_COLUMNS} FROM tblMembers m ${DETAIL_JOINS} WHERE m.id = ?`;
     const params: any[] = [id];
     if (scope) {
       query += ` AND ${scope.column} = ?`;
@@ -357,7 +357,7 @@ export class MemberService {
 
   static async getProfileByUserId(userId: number) {
     const db = await getDbConnection();
-    const [rows]: any = await db.query(`SELECT ${DETAIL_COLUMNS} FROM members m ${DETAIL_JOINS} WHERE m.user_id = ?`, [userId]);
+    const [rows]: any = await db.query(`SELECT ${DETAIL_COLUMNS} FROM tblMembers m ${DETAIL_JOINS} WHERE m.user_id = ?`, [userId]);
     const detail = toSafeDetail(rows[0]);
     if (!detail) return null;
     const qr_data_url = detail.verification_token ? await generateMemberQrDataUrl(detail.verification_token) : null;
@@ -370,14 +370,14 @@ export class MemberService {
     if (!member) throw new HttpError(404, 'Member not found', 'NOT_FOUND');
 
     const db = await getDbConnection();
-    await db.query('UPDATE members SET status = ? WHERE id = ?', [status, id]);
-    await db.query('UPDATE users SET status = ? WHERE id = ?', [status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE', member.user_id]);
+    await db.query('UPDATE tblMembers SET status = ? WHERE id = ?', [status, id]);
+    await db.query('UPDATE tblUsers SET status = ? WHERE id = ?', [status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE', member.user_id]);
     return this.getMemberById(id, scope);
   }
 
   static async updateRole(id: number, roleId: number, actor: AuthUser) {
     const db = await getDbConnection();
-    const [roles]: any = await db.query('SELECT id, name FROM roles WHERE id = ?', [roleId]);
+    const [roles]: any = await db.query('SELECT id, name FROM tblRoles WHERE id = ?', [roleId]);
     if (roles.length === 0) throw fieldError('role_id', 'Invalid role');
     if (['Admin', 'Super Admin'].includes(roles[0].name) && !actor.roles.includes(ROLES.SUPER_ADMIN)) {
       throw new HttpError(403, 'Only a Super Admin can grant administrator roles', 'FORBIDDEN');
@@ -390,9 +390,9 @@ export class MemberService {
     const conn = await db.getConnection();
     try {
       await conn.beginTransaction();
-      await conn.query('UPDATE members SET role_id = ? WHERE id = ?', [roleId, id]);
-      await conn.query('DELETE FROM user_roles WHERE user_id = ?', [member.user_id]);
-      await conn.query('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [member.user_id, roleId]);
+      await conn.query('UPDATE tblMembers SET role_id = ? WHERE id = ?', [roleId, id]);
+      await conn.query('DELETE FROM tblUser_roles WHERE user_id = ?', [member.user_id]);
+      await conn.query('INSERT INTO tblUser_roles (user_id, role_id) VALUES (?, ?)', [member.user_id, roleId]);
       await conn.commit();
     } catch (err) {
       await conn.rollback();
@@ -405,7 +405,7 @@ export class MemberService {
 
   static async getMemberForIdCard(where: { id?: number; userId?: number }, scope: StaffScope | null = null) {
     const db = await getDbConnection();
-    let query = `SELECT ${DETAIL_COLUMNS} FROM members m ${DETAIL_JOINS} WHERE `;
+    let query = `SELECT ${DETAIL_COLUMNS} FROM tblMembers m ${DETAIL_JOINS} WHERE `;
     const params: any[] = [];
     if (where.userId) {
       query += 'm.user_id = ?';

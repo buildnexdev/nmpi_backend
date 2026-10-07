@@ -11,7 +11,7 @@ import {
 
 async function ensureTable(db: any) {
   await db.query(`
-    CREATE TABLE IF NOT EXISTS role_page_access (
+    CREATE TABLE IF NOT EXISTS tblRole_page_access (
       id int(11) NOT NULL AUTO_INCREMENT,
       role_id int(11) NOT NULL,
       page_key varchar(50) NOT NULL,
@@ -22,16 +22,16 @@ async function ensureTable(db: any) {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  const [countRows]: any = await db.query('SELECT COUNT(*) as c FROM role_page_access');
+  const [countRows]: any = await db.query('SELECT COUNT(*) as c FROM tblRole_page_access');
   if (countRows[0].c > 0) return;
 
-  const [roles]: any = await db.query('SELECT id, name FROM roles');
+  const [roles]: any = await db.query('SELECT id, name FROM tblRoles');
   for (const role of roles) {
     const code = normalizeRoleCode(role.name);
     const pages = DEFAULT_ROLE_PAGES[code] || ['account'];
     for (const page of PORTAL_PAGES) {
       await db.query(
-        'INSERT IGNORE INTO role_page_access (role_id, page_key, allowed) VALUES (?, ?, ?)',
+        'INSERT IGNORE INTO tblRole_page_access (role_id, page_key, allowed) VALUES (?, ?, ?)',
         [role.id, page.key, pages.includes(page.key) ? 1 : 0]
       );
     }
@@ -44,12 +44,12 @@ export class AccessService {
     if (!db) return { pages: PORTAL_PAGES, roles: [] };
     await ensureTable(db);
 
-    const [roles]: any = await db.query('SELECT id, name, description FROM roles ORDER BY id ASC');
-    const [rows]: any = await db.query('SELECT role_id, page_key, allowed FROM role_page_access');
+    const [roles]: any = await db.query('SELECT id, name, description FROM tblRoles ORDER BY id ASC');
+    const [rows]: any = await db.query('SELECT role_id, page_key, allowed FROM tblRole_page_access');
     const [counts]: any = await db.query(
       `SELECT r.id as role_id, COUNT(m.id) as member_count
-       FROM roles r
-       LEFT JOIN members m ON m.role_id = r.id
+       FROM tblRoles r
+       LEFT JOIN tblMembers m ON m.role_id = r.id
        GROUP BY r.id`
     );
     const countMap = Object.fromEntries(counts.map((c: any) => [c.role_id, Number(c.member_count)]));
@@ -96,7 +96,7 @@ export class AccessService {
     if (!db) throw new Error('Database connection unavailable.');
     await ensureTable(db);
 
-    const [roles]: any = await db.query('SELECT id, name FROM roles');
+    const [roles]: any = await db.query('SELECT id, name FROM tblRoles');
     const roleById = Object.fromEntries(roles.map((r: any) => [r.id, r]));
 
     for (const item of items) {
@@ -110,7 +110,7 @@ export class AccessService {
         if (page.key === 'account') allowed = true;
         if (page.key === 'roles') allowed = code === ROLE_CODES.ADMIN;
         await db.query(
-          `INSERT INTO role_page_access (role_id, page_key, allowed)
+          `INSERT INTO tblRole_page_access (role_id, page_key, allowed)
            VALUES (?, ?, ?)
            ON DUPLICATE KEY UPDATE allowed = VALUES(allowed)`,
           [item.role_id, page.key, allowed ? 1 : 0]
@@ -130,7 +130,7 @@ export class AccessService {
       return [...pages];
     }
     await ensureTable(db);
-    const [roles]: any = await db.query('SELECT id, name FROM roles');
+    const [roles]: any = await db.query('SELECT id, name FROM tblRoles');
     const ids = roles.filter((r: any) => codes.includes(normalizeRoleCode(r.name))).map((r: any) => r.id);
     if (ids.length === 0) {
       const pages = new Set<string>(['account']);
@@ -139,7 +139,7 @@ export class AccessService {
       return [...pages];
     }
     const [rows]: any = await db.query(
-      `SELECT page_key FROM role_page_access WHERE role_id IN (${ids.map(() => '?').join(',')}) AND allowed = 1`,
+      `SELECT page_key FROM tblRole_page_access WHERE role_id IN (${ids.map(() => '?').join(',')}) AND allowed = 1`,
       ids
     );
     const pages = new Set<string>(['account']);

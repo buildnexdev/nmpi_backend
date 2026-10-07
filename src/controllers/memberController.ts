@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
 import jwt from 'jsonwebtoken';
 import { MemberService } from '../services/memberService';
 import { sendSuccess, sendError } from '../utils/response';

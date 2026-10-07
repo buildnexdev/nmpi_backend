@@ -16,14 +16,14 @@ export class AuthService {
     if (!Number.isInteger(userId) || userId <= 0) return null;
     const db = await getDbConnection();
     const [users]: any = await db.query(
-      'SELECT id, email, country_code, phone_number, status FROM users WHERE id = ?',
+      'SELECT id, email, country_code, phone_number, status FROM tblUsers WHERE id = ?',
       [userId]
     );
     if (users.length === 0) return null;
     const user = users[0];
 
     const [roleRows]: any = await db.query(
-      'SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = ?',
+      'SELECT r.name FROM tblRoles r JOIN tblUser_roles ur ON r.id = ur.role_id WHERE ur.user_id = ?',
       [userId]
     );
     const roleNames: string[] = roleRows.map((r: any) => r.name);
@@ -33,7 +33,7 @@ export class AuthService {
 
     const [memberRows]: any = await db.query(
       `SELECT m.id, m.member_id, m.full_name, m.status, m.profile_image, m.district_id, m.block_id, m.village_id, r.name AS role_name
-       FROM members m LEFT JOIN roles r ON m.role_id = r.id
+       FROM tblMembers m LEFT JOIN tblRoles r ON m.role_id = r.id
        WHERE m.user_id = ?`,
       [userId]
     );
@@ -72,7 +72,7 @@ export class AuthService {
     const phone = normalizePhone(login);
 
     const [users]: any = await db.query(
-      "SELECT id, password_hash, status FROM users WHERE email = ? OR (? <> '' AND phone_number = ?) LIMIT 1",
+      "SELECT id, password_hash, status FROM tblUsers WHERE email = ? OR (? <> '' AND phone_number = ?) LIMIT 1",
       [login.toLowerCase(), phone, phone]
     );
 
@@ -109,13 +109,13 @@ export class AuthService {
       throw new HttpError(401, 'Invalid session.', 'UNAUTHORIZED');
     }
     const db = await getDbConnection();
-    const [rows]: any = await db.query('SELECT password_hash FROM users WHERE id = ?', [userId]);
+    const [rows]: any = await db.query('SELECT password_hash FROM tblUsers WHERE id = ?', [userId]);
     if (rows.length === 0) throw new HttpError(404, 'User not found', 'NOT_FOUND');
 
     const ok = await bcrypt.compare(currentPassword, rows[0].password_hash);
     if (!ok) throw new HttpError(400, 'Current password is incorrect', 'VALIDATION_ERROR', { field: 'current_password' });
 
     const hash = await bcrypt.hash(newPassword, 10);
-    await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, userId]);
+    await db.query('UPDATE tblUsers SET password_hash = ? WHERE id = ?', [hash, userId]);
   }
 }

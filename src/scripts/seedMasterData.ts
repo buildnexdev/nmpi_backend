@@ -73,7 +73,7 @@ async function seedDatabase() {
   await db.query(`SET FOREIGN_KEY_CHECKS = 0;`);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`states\` (
+    CREATE TABLE IF NOT EXISTS \`tblStates\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`name_en\` VARCHAR(100) NOT NULL UNIQUE,
       \`name_ta\` VARCHAR(100) NOT NULL,
@@ -83,31 +83,31 @@ async function seedDatabase() {
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`parliament_constituencies\` (
+    CREATE TABLE IF NOT EXISTS \`tblParliament_constituencies\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`state_id\` INT NOT NULL DEFAULT 1,
       \`name_en\` VARCHAR(100) NOT NULL UNIQUE,
       \`name_ta\` VARCHAR(100) NOT NULL,
       \`code\` VARCHAR(20) NOT NULL,
       \`status\` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
-      FOREIGN KEY (\`state_id\`) REFERENCES \`states\`(\`id\`) ON DELETE CASCADE
+      FOREIGN KEY (\`state_id\`) REFERENCES \`tblStates\`(\`id\`) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`assembly_constituencies\` (
+    CREATE TABLE IF NOT EXISTS \`tblAssembly_constituencies\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`parliament_constituency_id\` INT NULL,
       \`name_en\` VARCHAR(100) NOT NULL UNIQUE,
       \`name_ta\` VARCHAR(100) NOT NULL,
       \`code\` VARCHAR(20) NULL,
       \`status\` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
-      FOREIGN KEY (\`parliament_constituency_id\`) REFERENCES \`parliament_constituencies\`(\`id\`) ON DELETE SET NULL
+      FOREIGN KEY (\`parliament_constituency_id\`) REFERENCES \`tblParliament_constituencies\`(\`id\`) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`districts\` (
+    CREATE TABLE IF NOT EXISTS \`tblDistricts\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`lgd_code\` INT NOT NULL UNIQUE,
       \`state_id\` INT NOT NULL DEFAULT 1,
@@ -115,12 +115,12 @@ async function seedDatabase() {
       \`name_ta\` VARCHAR(100) NOT NULL,
       \`code\` VARCHAR(20) NOT NULL,
       \`status\` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
-      FOREIGN KEY (\`state_id\`) REFERENCES \`states\`(\`id\`) ON DELETE CASCADE
+      FOREIGN KEY (\`state_id\`) REFERENCES \`tblStates\`(\`id\`) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`blocks\` (
+    CREATE TABLE IF NOT EXISTS \`tblBlocks\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`district_id\` INT NOT NULL,
       \`lgd_code\` INT NOT NULL UNIQUE,
@@ -128,12 +128,12 @@ async function seedDatabase() {
       \`name_ta\` VARCHAR(100) NOT NULL,
       \`code\` VARCHAR(20) NULL,
       \`status\` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
-      FOREIGN KEY (\`district_id\`) REFERENCES \`districts\`(\`id\`) ON DELETE CASCADE
+      FOREIGN KEY (\`district_id\`) REFERENCES \`tblDistricts\`(\`id\`) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`villages\` (
+    CREATE TABLE IF NOT EXISTS \`tblVillages\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`district_id\` INT NOT NULL,
       \`block_id\` INT NOT NULL,
@@ -142,14 +142,14 @@ async function seedDatabase() {
       \`name_ta\` VARCHAR(100) NULL,
       \`code\` VARCHAR(20) NULL,
       \`status\` ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
-      FOREIGN KEY (\`district_id\`) REFERENCES \`districts\`(\`id\`) ON DELETE CASCADE,
-      FOREIGN KEY (\`block_id\`) REFERENCES \`blocks\`(\`id\`) ON DELETE CASCADE,
+      FOREIGN KEY (\`district_id\`) REFERENCES \`tblDistricts\`(\`id\`) ON DELETE CASCADE,
+      FOREIGN KEY (\`block_id\`) REFERENCES \`tblBlocks\`(\`id\`) ON DELETE CASCADE,
       INDEX \`idx_villages_block\` (\`block_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`roles\` (
+    CREATE TABLE IF NOT EXISTS \`tblRoles\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`name\` VARCHAR(50) NOT NULL UNIQUE,
       \`description\` VARCHAR(255) NULL
@@ -157,7 +157,7 @@ async function seedDatabase() {
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`users\` (
+    CREATE TABLE IF NOT EXISTS \`tblUsers\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`email\` VARCHAR(191) NOT NULL UNIQUE,
       \`country_code\` VARCHAR(10) NOT NULL DEFAULT '+91',
@@ -170,18 +170,18 @@ async function seedDatabase() {
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`user_roles\` (
+    CREATE TABLE IF NOT EXISTS \`tblUser_roles\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`user_id\` INT NOT NULL,
       \`role_id\` INT NOT NULL,
       UNIQUE KEY \`uk_user_role\` (\`user_id\`, \`role_id\`),
-      FOREIGN KEY (\`user_id\`) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE,
-      FOREIGN KEY (\`role_id\`) REFERENCES \`roles\`(\`id\`) ON DELETE CASCADE
+      FOREIGN KEY (\`user_id\`) REFERENCES \`tblUsers\`(\`id\`) ON DELETE CASCADE,
+      FOREIGN KEY (\`role_id\`) REFERENCES \`tblRoles\`(\`id\`) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`members\` (
+    CREATE TABLE IF NOT EXISTS \`tblMembers\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`user_id\` INT NOT NULL UNIQUE,
       \`member_id\` VARCHAR(50) NOT NULL UNIQUE,
@@ -210,25 +210,25 @@ async function seedDatabase() {
       \`status\` ENUM('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED') NOT NULL DEFAULT 'APPROVED',
       \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (\`user_id\`) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE,
-      FOREIGN KEY (\`state_id\`) REFERENCES \`states\`(\`id\`),
-      FOREIGN KEY (\`parliament_constituency_id\`) REFERENCES \`parliament_constituencies\`(\`id\`),
-      FOREIGN KEY (\`district_id\`) REFERENCES \`districts\`(\`id\`),
-      FOREIGN KEY (\`block_id\`) REFERENCES \`blocks\`(\`id\`),
-      FOREIGN KEY (\`role_id\`) REFERENCES \`roles\`(\`id\`),
+      FOREIGN KEY (\`user_id\`) REFERENCES \`tblUsers\`(\`id\`) ON DELETE CASCADE,
+      FOREIGN KEY (\`state_id\`) REFERENCES \`tblStates\`(\`id\`),
+      FOREIGN KEY (\`parliament_constituency_id\`) REFERENCES \`tblParliament_constituencies\`(\`id\`),
+      FOREIGN KEY (\`district_id\`) REFERENCES \`tblDistricts\`(\`id\`),
+      FOREIGN KEY (\`block_id\`) REFERENCES \`tblBlocks\`(\`id\`),
+      FOREIGN KEY (\`role_id\`) REFERENCES \`tblRoles\`(\`id\`),
       INDEX \`idx_members_phone\` (\`country_code\`, \`phone_number\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
   await db.query(`
-    CREATE TABLE IF NOT EXISTS \`member_qr_codes\` (
+    CREATE TABLE IF NOT EXISTS \`tblMember_qr_codes\` (
       \`id\` INT AUTO_INCREMENT PRIMARY KEY,
       \`member_id\` INT NOT NULL UNIQUE,
       \`verification_token\` VARCHAR(100) NOT NULL UNIQUE,
       \`qr_image_path\` VARCHAR(255) NULL,
       \`issued_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       \`expires_at\` DATETIME NULL,
-      FOREIGN KEY (\`member_id\`) REFERENCES \`members\`(\`id\`) ON DELETE CASCADE
+      FOREIGN KEY (\`member_id\`) REFERENCES \`tblMembers\`(\`id\`) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
@@ -236,7 +236,7 @@ async function seedDatabase() {
   console.log('✅ Base tables verified.');
 
   // 4. Seed State (Tamil Nadu)
-  await db.query(`INSERT IGNORE INTO \`states\` (id, name_en, name_ta, code) VALUES (1, 'Tamil Nadu', 'தமிழ்நாடு', 'TN');`);
+  await db.query(`INSERT IGNORE INTO \`tblStates\` (id, name_en, name_ta, code) VALUES (1, 'Tamil Nadu', 'தமிழ்நாடு', 'TN');`);
 
   // 5. Seed Roles
   const defaultRoles = [
@@ -249,7 +249,7 @@ async function seedDatabase() {
     { id: 7, name: 'Super Admin', description: 'Full System Super Administrator' }
   ];
   for (const r of defaultRoles) {
-    await db.query(`INSERT INTO \`roles\` (id, name, description) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE description=VALUES(description);`, [r.id, r.name, r.description]);
+    await db.query(`INSERT INTO \`tblRoles\` (id, name, description) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE description=VALUES(description);`, [r.id, r.name, r.description]);
   }
   console.log('✅ Default Roles seeded.');
 
@@ -268,7 +268,7 @@ async function seedDatabase() {
 
       const pCode = parliamentCodes[nameEn] || nameEn.substring(0, 3).toUpperCase();
       await db.query(
-        `INSERT INTO \`parliament_constituencies\` (state_id, name_en, name_ta, code) VALUES (1, ?, ?, ?) ON DUPLICATE KEY UPDATE name_ta=VALUES(name_ta), code=VALUES(code);`,
+        `INSERT INTO \`tblParliament_constituencies\` (state_id, name_en, name_ta, code) VALUES (1, ?, ?, ?) ON DUPLICATE KEY UPDATE name_ta=VALUES(name_ta), code=VALUES(code);`,
         [nameEn, nameTa, pCode]
       );
       count++;
@@ -289,7 +289,7 @@ async function seedDatabase() {
       if (!nameEn || nameEn === 'English') continue;
 
       await db.query(
-        `INSERT INTO \`assembly_constituencies\` (name_en, name_ta) VALUES (?, ?) ON DUPLICATE KEY UPDATE name_ta=VALUES(name_ta);`,
+        `INSERT INTO \`tblAssembly_constituencies\` (name_en, name_ta) VALUES (?, ?) ON DUPLICATE KEY UPDATE name_ta=VALUES(name_ta);`,
         [nameEn, nameTa]
       );
       count++;
@@ -324,7 +324,7 @@ async function seedDatabase() {
       const codeStr = `DIST-${lgdCode}`;
 
       await db.query(
-        `INSERT INTO \`districts\` (lgd_code, state_id, name_en, name_ta, code) VALUES (?, 1, ?, ?, ?) ON DUPLICATE KEY UPDATE name_en=VALUES(name_en), name_ta=VALUES(name_ta);`,
+        `INSERT INTO \`tblDistricts\` (lgd_code, state_id, name_en, name_ta, code) VALUES (?, 1, ?, ?, ?) ON DUPLICATE KEY UPDATE name_en=VALUES(name_en), name_ta=VALUES(name_ta);`,
         [lgdCode, nameEn, nameTa, codeStr]
       );
       count++;
@@ -351,7 +351,7 @@ async function seedDatabase() {
     }
 
     // Fetch District ID mapping from MySQL
-    const [distRows]: any = await db.query(`SELECT id, lgd_code FROM \`districts\`;`);
+    const [distRows]: any = await db.query(`SELECT id, lgd_code FROM \`tblDistricts\`;`);
     const distIdMap: Record<number, number> = {};
     distRows.forEach((d: any) => { distIdMap[d.lgd_code] = d.id; });
 
@@ -365,7 +365,7 @@ async function seedDatabase() {
       const nameTa = taMap[blockLgd] || nameEn;
 
       await db.query(
-        `INSERT INTO \`blocks\` (district_id, lgd_code, name_en, name_ta) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE name_en=VALUES(name_en), name_ta=VALUES(name_ta);`,
+        `INSERT INTO \`tblBlocks\` (district_id, lgd_code, name_en, name_ta) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE name_en=VALUES(name_en), name_ta=VALUES(name_ta);`,
         [districtId, blockLgd, nameEn, nameTa]
       );
       count++;
@@ -380,11 +380,11 @@ async function seedDatabase() {
     const wbEng = XLSX.readFile(villageEngFile);
     const rowsEng: any[] = XLSX.utils.sheet_to_json(wbEng.Sheets[wbEng.SheetNames[0]]);
     
-    const [distRows]: any = await db.query(`SELECT id, lgd_code FROM \`districts\`;`);
+    const [distRows]: any = await db.query(`SELECT id, lgd_code FROM \`tblDistricts\`;`);
     const distIdMap: Record<number, number> = {};
     distRows.forEach((d: any) => { distIdMap[d.lgd_code] = d.id; });
 
-    const [blockRows]: any = await db.query(`SELECT id, lgd_code FROM \`blocks\`;`);
+    const [blockRows]: any = await db.query(`SELECT id, lgd_code FROM \`tblBlocks\`;`);
     const blockIdMap: Record<number, number> = {};
     blockRows.forEach((b: any) => { blockIdMap[b.lgd_code] = b.id; });
 
@@ -406,7 +406,7 @@ async function seedDatabase() {
 
       if (valuesBatch.length >= batchSize) {
         await db.query(
-          `INSERT INTO \`villages\` (district_id, block_id, lgd_code, name_en) VALUES ? ON DUPLICATE KEY UPDATE name_en=VALUES(name_en);`,
+          `INSERT INTO \`tblVillages\` (district_id, block_id, lgd_code, name_en) VALUES ? ON DUPLICATE KEY UPDATE name_en=VALUES(name_en);`,
           [valuesBatch]
         );
         valuesBatch = [];
@@ -415,7 +415,7 @@ async function seedDatabase() {
 
     if (valuesBatch.length > 0) {
       await db.query(
-        `INSERT INTO \`villages\` (district_id, block_id, lgd_code, name_en) VALUES ? ON DUPLICATE KEY UPDATE name_en=VALUES(name_en);`,
+        `INSERT INTO \`tblVillages\` (district_id, block_id, lgd_code, name_en) VALUES ? ON DUPLICATE KEY UPDATE name_en=VALUES(name_en);`,
         [valuesBatch]
       );
     }

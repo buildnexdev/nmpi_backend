@@ -7,7 +7,7 @@ const STATUSES = ['DRAFT', 'PUBLISHED'] as const;
 export class NewsService {
   static async list(filters: any, includeDrafts: boolean) {
     const db = await getDbConnection();
-    let query = 'SELECT * FROM news WHERE 1=1';
+    let query = 'SELECT * FROM tblNews WHERE 1=1';
     const params: any[] = [];
 
     if (!includeDrafts) {
@@ -35,7 +35,7 @@ export class NewsService {
   static async get(idOrSlug: string, includeDrafts: boolean) {
     const db = await getDbConnection();
     const [rows]: any = await db.query(
-      `SELECT * FROM news WHERE (id = ? OR slug = ?) ${includeDrafts ? '' : "AND status = 'PUBLISHED'"} LIMIT 1`,
+      `SELECT * FROM tblNews WHERE (id = ? OR slug = ?) ${includeDrafts ? '' : "AND status = 'PUBLISHED'"} LIMIT 1`,
       [Number(idOrSlug) || 0, idOrSlug]
     );
     return rows[0] || null;
@@ -45,7 +45,7 @@ export class NewsService {
     requireFields(data, [['title', 'Title'], ['summary', 'Summary'], ['content', 'Content']]);
     const db = await getDbConnection();
     const [res]: any = await db.query(
-      `INSERT INTO news (author_id, category, title, title_ta, slug, summary, summary_ta, content, content_ta, cover_image, is_featured, status, published_at)
+      `INSERT INTO tblNews (author_id, category, title, title_ta, slug, summary, summary_ta, content, content_ta, cover_image, is_featured, status, published_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         authorId,
@@ -73,7 +73,7 @@ export class NewsService {
     const merged = { ...existing, ...data };
     const db = await getDbConnection();
     await db.query(
-      `UPDATE news SET category = ?, title = ?, title_ta = ?, summary = ?, summary_ta = ?, content = ?, content_ta = ?,
+      `UPDATE tblNews SET category = ?, title = ?, title_ta = ?, summary = ?, summary_ta = ?, content = ?, content_ta = ?,
          cover_image = ?, is_featured = ?, status = ? WHERE id = ?`,
       [
         pickOptional(merged, 'category') || 'Announcement',
@@ -94,41 +94,7 @@ export class NewsService {
 
   static async remove(id: number) {
     const db = await getDbConnection();
-    const [res]: any = await db.query('DELETE FROM news WHERE id = ?', [id]);
-    if (res.affectedRows === 0) throw new HttpError(404, 'News article not found', 'NOT_FOUND');
-  }
-
-  static async updateNews(id: number, data: any) {
-    const db = await getDbConnection();
-    if (!db) throw new Error('Database connection unavailable.');
-    const existing = await this.getNewsById(id);
-    if (!existing) return null;
-    const slug = data.slug || existing.slug;
-    await db.query(
-      `UPDATE tblNews SET category=?, title=?, title_ta=?, slug=?, summary=?, summary_ta=?, content=?, content_ta=?, cover_image=?, is_featured=?, status=?
-       WHERE id=?`,
-      [
-        data.category || existing.category || 'Announcement',
-        data.title ?? existing.title,
-        data.title_ta ?? existing.title_ta ?? null,
-        slug,
-        data.summary ?? existing.summary,
-        data.summary_ta ?? existing.summary_ta ?? null,
-        data.content ?? existing.content,
-        data.content_ta ?? existing.content_ta ?? null,
-        data.cover_image !== undefined ? data.cover_image : existing.cover_image,
-        data.is_featured ? 1 : 0,
-        data.status || existing.status,
-        id,
-      ]
-    );
-    return this.getNewsById(id);
-  }
-
-  static async deleteNews(id: number) {
-    const db = await getDbConnection();
-    if (!db) throw new Error('Database connection unavailable.');
     const [res]: any = await db.query('DELETE FROM tblNews WHERE id = ?', [id]);
-    return res.affectedRows > 0;
+    if (res.affectedRows === 0) throw new HttpError(404, 'News article not found', 'NOT_FOUND');
   }
 }
