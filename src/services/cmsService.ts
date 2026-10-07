@@ -80,6 +80,91 @@ export class CmsService {
     return rows;
   }
 
+  static async getLeadersAdmin() {
+    const db = await getDbConnection();
+    if (db) {
+      const [rows]: any = await db.query('SELECT * FROM tblLeaders ORDER BY display_order ASC, id ASC');
+      return rows;
+    }
+    return mockDbStore.leaders;
+  }
+
+  static async createLeader(data: any) {
+    const db = await getDbConnection();
+    if (!db) throw new Error('Database connection unavailable.');
+    const [res]: any = await db.query(
+      `INSERT INTO tblLeaders (name, name_ta, designation, designation_ta, district, district_ta, qualification, photo_url, phone, email, bio, display_order, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        data.name,
+        data.name_ta || null,
+        data.designation,
+        data.designation_ta || null,
+        data.district || null,
+        data.district_ta || null,
+        data.qualification || null,
+        data.photo_url || null,
+        data.phone || null,
+        data.email || null,
+        data.bio || null,
+        Number(data.display_order) || 0,
+        data.status || 'ACTIVE',
+      ]
+    );
+    const [rows]: any = await db.query('SELECT * FROM tblLeaders WHERE id = ?', [res.insertId]);
+    return rows[0];
+  }
+
+  static async updateLeader(id: number, data: any) {
+    const db = await getDbConnection();
+    if (!db) throw new Error('Database connection unavailable.');
+    const [existing]: any = await db.query('SELECT * FROM tblLeaders WHERE id = ?', [id]);
+    if (!existing[0]) return null;
+    const row = existing[0];
+    await db.query(
+      `UPDATE tblLeaders SET name=?, name_ta=?, designation=?, designation_ta=?, district=?, district_ta=?, qualification=?, photo_url=?, phone=?, email=?, bio=?, display_order=?, status=?
+       WHERE id=?`,
+      [
+        data.name ?? row.name,
+        data.name_ta !== undefined ? data.name_ta : row.name_ta,
+        data.designation ?? row.designation,
+        data.designation_ta !== undefined ? data.designation_ta : row.designation_ta,
+        data.district !== undefined ? data.district : row.district,
+        data.district_ta !== undefined ? data.district_ta : row.district_ta,
+        data.qualification !== undefined ? data.qualification : row.qualification,
+        data.photo_url !== undefined ? data.photo_url : row.photo_url,
+        data.phone !== undefined ? data.phone : row.phone,
+        data.email !== undefined ? data.email : row.email,
+        data.bio !== undefined ? data.bio : row.bio,
+        data.display_order !== undefined ? Number(data.display_order) : row.display_order,
+        data.status || row.status,
+        id,
+      ]
+    );
+    const [rows]: any = await db.query('SELECT * FROM tblLeaders WHERE id = ?', [id]);
+    return rows[0];
+  }
+
+  static async deleteLeader(id: number) {
+    const db = await getDbConnection();
+    if (!db) throw new Error('Database connection unavailable.');
+    const [res]: any = await db.query('DELETE FROM tblLeaders WHERE id = ?', [id]);
+    return res.affectedRows > 0;
+  }
+
+  static async getPages() {
+    const db = await getDbConnection();
+    if (db) {
+      const [rows]: any = await db.query('SELECT * FROM tblOrganization_pages ORDER BY id ASC');
+      return rows;
+    }
+    return Object.entries(mockDbStore.organization_pages || {}).map(([page_key, p]: any) => ({
+      page_key,
+      title: p.title,
+      content: p.content,
+    }));
+  }
+
   static async getPage(pageKey: string) {
     const db = await getDbConnection();
     const [rows]: any = await db.query('SELECT * FROM organization_pages WHERE page_key = ?', [pageKey]);

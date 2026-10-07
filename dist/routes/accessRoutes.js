@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const accessController_1 = require("../controllers/accessController");
+const authMiddleware_1 = require("../middleware/authMiddleware");
+const rbacMiddleware_1 = require("../middleware/rbacMiddleware");
+const roles_1 = require("../utils/roles");
+const router = (0, express_1.Router)();
+router.get('/matrix', authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)([roles_1.ROLE_CODES.SUPER_ADMIN, roles_1.ROLE_CODES.ADMIN]), accessController_1.getAccessMatrix);
+router.put('/matrix', authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)([roles_1.ROLE_CODES.SUPER_ADMIN, roles_1.ROLE_CODES.ADMIN]), accessController_1.saveAccessMatrix);
+exports.default = router;

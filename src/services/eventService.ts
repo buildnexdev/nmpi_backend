@@ -111,4 +111,38 @@ export class EventService {
     const [res]: any = await db.query('DELETE FROM events WHERE id = ?', [id]);
     if (res.affectedRows === 0) throw new HttpError(404, 'Event not found', 'NOT_FOUND');
   }
+
+  static async updateEvent(id: number, data: any) {
+    const db = await getDbConnection();
+    if (!db) throw new Error('Database connection unavailable.');
+    const existing = await this.getEventById(id);
+    if (!existing) return null;
+    await db.query(
+      `UPDATE tblEvents SET title=?, title_ta=?, description=?, description_ta=?, location=?, venue_address=?, event_date=?, start_time=?, end_time=?, cover_image=?, capacity=?, status=?
+       WHERE id=?`,
+      [
+        data.title ?? existing.title,
+        data.title_ta ?? existing.title_ta ?? null,
+        data.description ?? existing.description,
+        data.description_ta ?? existing.description_ta ?? null,
+        data.location ?? existing.location,
+        data.venue_address !== undefined ? data.venue_address : existing.venue_address,
+        data.event_date ?? existing.event_date,
+        data.start_time ?? existing.start_time,
+        data.end_time !== undefined ? data.end_time : existing.end_time,
+        data.cover_image !== undefined ? data.cover_image : existing.cover_image,
+        data.capacity ?? existing.capacity,
+        data.status ?? existing.status,
+        id,
+      ]
+    );
+    return this.getEventById(id);
+  }
+
+  static async deleteEvent(id: number) {
+    const db = await getDbConnection();
+    if (!db) throw new Error('Database connection unavailable.');
+    const [res]: any = await db.query('DELETE FROM tblEvents WHERE id = ?', [id]);
+    return res.affectedRows > 0;
+  }
 }

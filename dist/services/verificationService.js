@@ -11,14 +11,14 @@ class VerificationService {
     static async verifyToken(token) {
         const db = await (0, database_1.getDbConnection)();
         if (db) {
-            const [rows] = await db.query(`SELECT m.full_name, m.member_id, m.status, m.joining_date, m.profile_photo,
-                d.name as district_name, t.name as taluk_name, u.name as unit_name, mt.name as membership_type_name
-         FROM member_qr_codes qr
-         JOIN members m ON qr.member_id = m.id
-         LEFT JOIN districts d ON m.district_id = d.id
-         LEFT JOIN taluks t ON m.taluk_id = t.id
-         LEFT JOIN units u ON m.unit_id = u.id
-         LEFT JOIN membership_types mt ON m.membership_type_id = mt.id
+            const [rows] = await db.query(`SELECT m.full_name, m.member_id, m.status, m.created_at as joining_date, m.profile_image as profile_photo,
+                d.name_en as district_name, b.name_en as taluk_name, v.name_en as unit_name, r.name as membership_type_name
+         FROM tblMember_qr_codes qr
+         JOIN tblMembers m ON qr.member_id = m.id
+         LEFT JOIN tblDistricts d ON m.district_id = d.id
+         LEFT JOIN tblBlocks b ON m.block_id = b.id
+         LEFT JOIN tblVillages v ON m.village_id = v.id
+         LEFT JOIN tblRoles r ON m.role_id = r.id
          WHERE qr.verification_token = ?`, [token]);
             if (rows.length === 0) {
                 return {

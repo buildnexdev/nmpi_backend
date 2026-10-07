@@ -97,4 +97,38 @@ export class NewsService {
     const [res]: any = await db.query('DELETE FROM news WHERE id = ?', [id]);
     if (res.affectedRows === 0) throw new HttpError(404, 'News article not found', 'NOT_FOUND');
   }
+
+  static async updateNews(id: number, data: any) {
+    const db = await getDbConnection();
+    if (!db) throw new Error('Database connection unavailable.');
+    const existing = await this.getNewsById(id);
+    if (!existing) return null;
+    const slug = data.slug || existing.slug;
+    await db.query(
+      `UPDATE tblNews SET category=?, title=?, title_ta=?, slug=?, summary=?, summary_ta=?, content=?, content_ta=?, cover_image=?, is_featured=?, status=?
+       WHERE id=?`,
+      [
+        data.category || existing.category || 'Announcement',
+        data.title ?? existing.title,
+        data.title_ta ?? existing.title_ta ?? null,
+        slug,
+        data.summary ?? existing.summary,
+        data.summary_ta ?? existing.summary_ta ?? null,
+        data.content ?? existing.content,
+        data.content_ta ?? existing.content_ta ?? null,
+        data.cover_image !== undefined ? data.cover_image : existing.cover_image,
+        data.is_featured ? 1 : 0,
+        data.status || existing.status,
+        id,
+      ]
+    );
+    return this.getNewsById(id);
+  }
+
+  static async deleteNews(id: number) {
+    const db = await getDbConnection();
+    if (!db) throw new Error('Database connection unavailable.');
+    const [res]: any = await db.query('DELETE FROM tblNews WHERE id = ?', [id]);
+    return res.affectedRows > 0;
+  }
 }

@@ -2,8 +2,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getDbConnection } from '../config/database';
 import { JWT_SECRET } from '../middleware/authMiddleware';
-import { ROLE_NAME_TO_CODE } from '../constants';
 import { HttpError } from '../types';
+import { normalizeRoleCodes, ROLE_LABELS } from '../utils/roles';
+import { AccessService } from './accessService';
 
 export function normalizePhone(value: string): string {
   const digits = String(value || '').replace(/\D/g, '');
@@ -12,6 +13,7 @@ export function normalizePhone(value: string): string {
 
 export class AuthService {
   static async getSessionUser(userId: number) {
+    if (!Number.isInteger(userId) || userId <= 0) return null;
     const db = await getDbConnection();
     const [users]: any = await db.query(
       'SELECT id, email, country_code, phone_number, status FROM users WHERE id = ?',
@@ -25,7 +27,9 @@ export class AuthService {
       [userId]
     );
     const roleNames: string[] = roleRows.map((r: any) => r.name);
-    const roles = Array.from(new Set(roleNames.map((n) => ROLE_NAME_TO_CODE[n]).filter(Boolean)));
+    const roles = normalizeRoleCodes(roleNames);
+    const role_names = roles.map((c) => ROLE_LABELS[c] || c);
+    const pages = await AccessService.getPagesForRoleNames(roles);
 
     const [memberRows]: any = await db.query(
       `SELECT m.id, m.member_id, m.full_name, m.status, m.profile_image, m.district_id, m.block_id, m.village_id, r.name AS role_name
@@ -40,10 +44,25 @@ export class AuthService {
       email: user.email,
       country_code: user.country_code,
       phone_number: user.phone_number,
+      mobile: user.phone_number,
       status: user.status,
       roles,
-      role_names: roleNames,
-      member,
+      role_names,
+      pages,
+      member: member
+        ? {
+            id: member.id,
+            member_id: member.member_id,
+            full_name: member.full_name,
+            status: member.status,
+            profile_photo: member.profile_image,
+            profile_image: member.profile_image,
+            role_name: member.role_name || role_names[0] || null,
+            district_id: member.district_id,
+            block_id: member.block_id,
+            village_id: member.village_id,
+          }
+        : null,
     };
   }
 
@@ -53,7 +72,7 @@ export class AuthService {
     const phone = normalizePhone(login);
 
     const [users]: any = await db.query(
-      'SELECT id, password_hash, status FROM users WHERE email = ? OR (? <> \'\' AND phone_number = ?) LIMIT 1',
+      "SELECT id, password_hash, status FROM users WHERE email = ? OR (? <> '' AND phone_number = ?) LIMIT 1",
       [login.toLowerCase(), phone, phone]
     );
 
@@ -86,6 +105,9 @@ export class AuthService {
   }
 
   static async changePassword(userId: number, currentPassword: string, newPassword: string) {
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw new HttpError(401, 'Invalid session.', 'UNAUTHORIZED');
+    }
     const db = await getDbConnection();
     const [rows]: any = await db.query('SELECT password_hash FROM users WHERE id = ?', [userId]);
     if (rows.length === 0) throw new HttpError(404, 'User not found', 'NOT_FOUND');

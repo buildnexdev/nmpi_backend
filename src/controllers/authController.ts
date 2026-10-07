@@ -26,7 +26,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
 export async function getMe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const user = await AuthService.getSessionUser(req.user!.id);
+    const user = await AuthService.getSessionUser(Number(req.user?.id));
     if (!user) return sendError(res, 'User not found', 'NOT_FOUND', 404);
     return sendSuccess(res, 'Current user retrieved', user);
   } catch (err) {
@@ -37,7 +37,7 @@ export async function getMe(req: AuthRequest, res: Response, next: NextFunction)
 export async function changePassword(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const body = await changePasswordSchema.validate(req.body, { abortEarly: true });
-    await AuthService.changePassword(req.user!.id, body.current_password, body.new_password);
+    await AuthService.changePassword(Number(req.user!.id), body.current_password, body.new_password);
     return sendSuccess(res, 'Password updated successfully');
   } catch (err) {
     next(err);

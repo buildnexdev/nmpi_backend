@@ -13,6 +13,8 @@ import eventRoutes from './routes/eventRoutes';
 import verifyRoutes from './routes/verifyRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import cmsRoutes from './routes/cmsRoutes';
+import accessRoutes from './routes/accessRoutes';
+import uploadRoutes from './routes/uploadRoutes';
 
 import { errorHandler } from './middleware/errorHandler';
 
@@ -46,6 +48,8 @@ app.use('/api/news', newsRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/verify', verifyRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/access', accessRoutes);
+app.use('/api/uploads', uploadRoutes);
 app.use('/api', cmsRoutes);
 
 app.use((req: Request, res: Response) => {

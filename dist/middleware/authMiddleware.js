@@ -7,6 +7,7 @@ exports.authenticateJWT = authenticateJWT;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const response_1 = require("../utils/response");
 const constants_1 = require("../constants");
+const roles_1 = require("../utils/roles");
 function authenticateJWT(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -20,7 +21,7 @@ function authenticateJWT(req, res, next) {
             id: decoded.id,
             email: decoded.email,
             mobile: decoded.mobile,
-            roles: decoded.roles || [],
+            roles: (0, roles_1.normalizeRoleCodes)(decoded.roles || []),
             permissions: decoded.permissions || [],
             member_id: decoded.member_id || null,
         };

@@ -193,8 +193,8 @@ export class MemberService {
       await conn.beginTransaction();
 
       const [userResult]: any = await conn.query(
-        `INSERT INTO users (email, country_code, phone_number, password_hash, status) VALUES (?, ?, ?, ?, 'ACTIVE')`,
-        [email, countryCode, phoneNumber, passwordHash]
+        `INSERT INTO tblUsers (email, country_code, phone_number, password_hash, status) VALUES (?, ?, ?, ?, 'ACTIVE')`,
+        [input.email, input.countryCode, input.phoneNumber, passwordHash]
       );
       const userId = userResult.insertId;
 
@@ -204,7 +204,7 @@ export class MemberService {
       const memberIdCode = generateMemberId(userId, parliamentCode);
 
       const [memberResult]: any = await conn.query(
-        `INSERT INTO members (
+        `INSERT INTO tblMembers (
           user_id, member_id, full_name, father_name, date_of_birth, gender,
           country_code, phone_number, email, profile_image, blood_group,
           aadhaar_number_encrypted, voter_id_encrypted, aadhaar_hash, voter_id_hash,

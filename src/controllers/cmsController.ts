@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { CmsService } from '../services/cmsService';
+import { DashboardService } from '../services/dashboardService';
 import { sendSuccess, sendError } from '../utils/response';
 
 function baseUrl(req: Request): string {

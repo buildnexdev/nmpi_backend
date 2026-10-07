@@ -69,6 +69,12 @@ export async function checkVoterId(req: Request, res: Response, next: NextFuncti
   }
 }
 
+/** Remove a multer-saved upload when the registration it belonged to did not go through. */
+function discardUpload(file?: Express.Multer.File) {
+  if (!file?.path) return;
+  fs.promises.unlink(file.path).catch(() => undefined);
+}
+
 export async function registerMember(req: Request, res: Response, next: NextFunction) {
   try {
     const member = await MemberService.registerMember(req.body, req.file);
