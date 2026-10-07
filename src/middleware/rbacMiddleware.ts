@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../types';
 import { sendError } from '../utils/response';
 import { ERROR_CODES, HTTP_STATUS } from '../constants';
-import { isSuperAdmin, normalizeRoleCodes } from '../utils/roles';
+import { isSuperAdmin } from '../utils/roles';
 import { AccessService } from '../services/accessService';
 
 export function requireRoles(allowedRoles: string[]) {
