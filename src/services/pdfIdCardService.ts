@@ -52,11 +52,9 @@ export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> 
       // Member Photo Placeholder / Image
       let photoDrawn = false;
       if (memberData.profile_image) {
-        const photoPath = path.isAbsolute(memberData.profile_image)
-          ? memberData.profile_image
-          : path.join(process.cwd(), memberData.profile_image.replace(/^\//, ''));
+        const photoPath = path.join(process.cwd(), String(memberData.profile_image).replace(/^\/+/, ''));
 
-        if (fs.existsSync(photoPath)) {
+        if (photoPath.startsWith(path.join(process.cwd(), 'uploads')) && fs.existsSync(photoPath)) {
           try {
             doc.image(photoPath, 10, 48, { fit: [54, 64] });
             doc.rect(10, 48, 54, 64).lineWidth(1.5).stroke(redMaroon);
@@ -90,7 +88,7 @@ export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> 
 
       // Blood Group Badge
       doc.rect(72, 110, 48, 14).fill(redMaroon);
-      doc.fillColor('#FFFFFF').fontSize(7).font('Helvetica-Bold').text(`BLOOD: ${memberData.blood_group || 'O+'}`, 75, 113);
+      doc.fillColor('#FFFFFF').fontSize(7).font('Helvetica-Bold').text(`BLOOD: ${memberData.blood_group && memberData.blood_group !== 'Unknown' ? memberData.blood_group : '-'}`, 75, 113);
 
       // Role Badge
       doc.rect(125, 110, 108, 14).fill(darkBlack);

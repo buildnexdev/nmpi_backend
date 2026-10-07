@@ -11,32 +11,9 @@ export function requireRoles(allowedRoles: string[]) {
       return sendError(res, 'Authentication required', ERROR_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
     }
 
-    const userRoles = normalizeRoleCodes(req.user.roles || []);
-    const allowed = normalizeRoleCodes(allowedRoles);
-    const hasRole = userRoles.some((role) => allowed.includes(role));
-
+    const hasRole = (req.user.roles || []).some((role) => allowedRoles.includes(role));
     if (!hasRole) {
-      return sendError(res, 'Access denied: Insufficient role permissions', ERROR_CODES.FORBIDDEN, HTTP_STATUS.FORBIDDEN);
-    }
-
-    next();
-  };
-}
-
-export function requirePermission(permissionCode: string) {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      return sendError(res, 'Authentication required', ERROR_CODES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
-    }
-
-    const userRoles = normalizeRoleCodes(req.user.roles || []);
-    if (userRoles.includes('SUPER_ADMIN')) {
-      return next(); // Super admin bypass
-    }
-
-    const userPermissions = req.user.permissions || [];
-    if (!userPermissions.includes(permissionCode)) {
-      return sendError(res, `Access denied: Missing required permission [${permissionCode}]`, ERROR_CODES.FORBIDDEN, HTTP_STATUS.FORBIDDEN);
+      return sendError(res, 'Access denied: insufficient permissions', ERROR_CODES.FORBIDDEN, HTTP_STATUS.FORBIDDEN);
     }
 
     next();

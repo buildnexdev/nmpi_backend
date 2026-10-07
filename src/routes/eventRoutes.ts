@@ -1,15 +1,17 @@
 import { Router } from 'express';
-import { getEvents, getEventById, getEventsAdminList, createEvent, updateEvent, deleteEvent } from '../controllers/eventController';
+import { listEvents, listAllEvents, getEvent, createEvent, updateEvent, deleteEvent } from '../controllers/eventController';
 import { authenticateJWT } from '../middleware/authMiddleware';
-import { requirePage } from '../middleware/rbacMiddleware';
+import { requireRoles } from '../middleware/rbacMiddleware';
+import { CONTENT_ADMIN_ROLES } from '../constants';
 
 const router = Router();
+const admins = [authenticateJWT, requireRoles(CONTENT_ADMIN_ROLES)];
 
-router.get('/', getEvents);
-router.get('/admin/list', authenticateJWT, requirePage('events'), getEventsAdminList);
-router.get('/:id', getEventById);
-router.post('/', authenticateJWT, requirePage('events'), createEvent);
-router.put('/:id', authenticateJWT, requirePage('events'), updateEvent);
-router.delete('/:id', authenticateJWT, requirePage('events'), deleteEvent);
+router.get('/', listEvents);
+router.get('/admin/list', ...admins, listAllEvents);
+router.get('/:id', getEvent);
+router.post('/', ...admins, createEvent);
+router.put('/:id', ...admins, updateEvent);
+router.delete('/:id', ...admins, deleteEvent);
 
 export default router;

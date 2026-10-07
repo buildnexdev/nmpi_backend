@@ -7,11 +7,11 @@ import {
   getBlocks,
   getVillages,
   getRoles,
-  getAllRoles
+  getAllRoles,
 } from '../controllers/masterDataController';
 import { authenticateJWT } from '../middleware/authMiddleware';
 import { requireRoles } from '../middleware/rbacMiddleware';
-import { STAFF_ROLE_CODES } from '../utils/roles';
+import { STAFF_ROLES } from '../constants';
 
 const router = Router();
 
@@ -22,6 +22,6 @@ router.get('/districts', getDistricts);
 router.get('/blocks', getBlocks);
 router.get('/villages', getVillages);
 router.get('/roles', getRoles);
-router.get('/roles/all', authenticateJWT, requireRoles([...STAFF_ROLE_CODES]), getAllRoles);
+router.get('/roles/all', authenticateJWT, requireRoles(STAFF_ROLES), getAllRoles);
 
 export default router;

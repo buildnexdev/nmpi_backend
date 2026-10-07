@@ -1,34 +1,39 @@
 import { Router } from 'express';
 import {
-  getLeaders,
-  getLeadersAdmin,
+  getPublicStats,
+  listLeaders,
+  listAllLeaders,
   createLeader,
   updateLeader,
   deleteLeader,
+  listPages,
   getPage,
-  getPages,
-  updatePage,
-  getGalleryAlbums,
-  getGeography,
-  getPublicStats,
+  savePage,
+  listUploads,
+  uploadMedia,
+  deleteUpload,
 } from '../controllers/cmsController';
 import { authenticateJWT } from '../middleware/authMiddleware';
-import { requirePage } from '../middleware/rbacMiddleware';
+import { requireRoles } from '../middleware/rbacMiddleware';
+import { uploadMediaImage } from '../middleware/uploadMiddleware';
+import { CONTENT_ADMIN_ROLES } from '../constants';
 
 const router = Router();
+const admins = [authenticateJWT, requireRoles(CONTENT_ADMIN_ROLES)];
 
 router.get('/public-stats', getPublicStats);
-router.get('/geography', getGeography);
-router.get('/gallery/albums', getGalleryAlbums);
+router.get('/leadership', listLeaders);
+router.get('/leadership/admin/list', ...admins, listAllLeaders);
+router.post('/leadership', ...admins, createLeader);
+router.put('/leadership/:id', ...admins, updateLeader);
+router.delete('/leadership/:id', ...admins, deleteLeader);
 
-router.get('/leadership/admin/list', authenticateJWT, requirePage('leadership'), getLeadersAdmin);
-router.post('/leadership', authenticateJWT, requirePage('leadership'), createLeader);
-router.put('/leadership/:id', authenticateJWT, requirePage('leadership'), updateLeader);
-router.delete('/leadership/:id', authenticateJWT, requirePage('leadership'), deleteLeader);
-router.get('/leadership', getLeaders);
-
-router.get('/pages', authenticateJWT, requirePage('pages'), getPages);
-router.put('/pages/:key', authenticateJWT, requirePage('pages'), updatePage);
+router.get('/pages', ...admins, listPages);
 router.get('/pages/:key', getPage);
+router.put('/pages/:key', ...admins, savePage);
+
+router.get('/uploads/list', listUploads);
+router.post('/uploads', ...admins, uploadMediaImage.single('file'), uploadMedia);
+router.delete('/uploads/:filename', ...admins, deleteUpload);
 
 export default router;

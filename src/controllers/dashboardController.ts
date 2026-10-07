@@ -1,12 +1,15 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { DashboardService } from '../services/dashboardService';
+import { MemberService } from '../services/memberService';
 import { sendSuccess } from '../utils/response';
+import { AuthRequest } from '../types';
 
-export async function getDashboardStats(req: Request, res: Response, next: NextFunction) {
+export async function getDashboardStats(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const stats = await DashboardService.getStatistics();
+    const scope = await MemberService.getStaffScope(req.user!);
+    const stats = await DashboardService.getStatistics(scope);
     return sendSuccess(res, 'Dashboard statistics calculated', stats);
-  } catch (err: any) {
+  } catch (err) {
     next(err);
   }
 }
