@@ -77,7 +77,20 @@ export class AuthService {
     );
 
     const user = users[0];
-    const isMatch = user ? await bcrypt.compare(passwordStr, user.password_hash) : false;
+    let isMatch = false;
+    if (user) {
+      const stored = String(user.password_hash || '');
+      if (stored.startsWith('$2a$') || stored.startsWith('$2b$') || stored.startsWith('$2y$')) {
+        isMatch = await bcrypt.compare(passwordStr, stored);
+      } else if (stored.length > 0) {
+        // Legacy imports sometimes stored plain text; upgrade to bcrypt on successful login.
+        isMatch = passwordStr === stored;
+        if (isMatch) {
+          const upgraded = await bcrypt.hash(passwordStr, 10);
+          await db.query('UPDATE tblUsers SET password_hash = ? WHERE id = ?', [upgraded, user.id]);
+        }
+      }
+    }
     if (!user || !isMatch) {
       throw new HttpError(401, 'Invalid email/phone or password', 'INVALID_CREDENTIALS');
     }

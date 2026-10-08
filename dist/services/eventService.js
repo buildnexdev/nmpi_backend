@@ -2,125 +2,105 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventService = void 0;
 const database_1 = require("../config/database");
+const types_1 = require("../types");
+const content_1 = require("../utils/content");
+const STATUSES = ['UPCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED'];
+const REQUIRED = [
+    ['title', 'Title'],
+    ['description', 'Description'],
+    ['location', 'Location'],
+    ['event_date', 'Event date'],
+    ['start_time', 'Start time'],
+];
+function validate(data) {
+    (0, content_1.requireFields)(data, REQUIRED);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.event_date))) {
+        throw new types_1.HttpError(400, 'Event date must be in YYYY-MM-DD format', 'VALIDATION_ERROR', { field: 'event_date' });
+    }
+    if (!/^\d{2}:\d{2}(:\d{2})?$/.test(String(data.start_time))) {
+        throw new types_1.HttpError(400, 'Start time must be in HH:MM format', 'VALIDATION_ERROR', { field: 'start_time' });
+    }
+}
 class EventService {
-    static async getEvents(filters = {}) {
+    static async list(filters, includeAll) {
         const db = await (0, database_1.getDbConnection)();
-        const status = typeof filters === 'string' ? filters : filters?.status;
-        const upcoming = typeof filters === 'object' && filters?.upcoming;
-        const limit = typeof filters === 'object' ? Number(filters?.limit) : 0;
-        if (db) {
-            let query = 'SELECT * FROM tblEvents WHERE 1=1';
-            const params = [];
-            if (status) {
-                query += ' AND status = ?';
-                params.push(status);
-            }
-            else if (upcoming) {
-                query += " AND status = 'UPCOMING' AND event_date >= CURDATE()";
-            }
-            query += ' ORDER BY event_date ASC';
-            if (Number.isInteger(limit) && limit > 0) {
-                query += ' LIMIT ?';
-                params.push(limit);
-            }
-            const [rows] = await db.query(query, params);
-            return rows;
+        let query = 'SELECT * FROM tblEvents WHERE 1=1';
+        const params = [];
+        if (STATUSES.includes(filters.status)) {
+            query += ' AND status = ?';
+            params.push(filters.status);
         }
-        else {
-            let list = [...database_1.mockDbStore.events];
-            if (status)
-                list = list.filter(e => e.status === status);
-            else if (upcoming)
-                list = list.filter(e => e.status === 'UPCOMING');
-            if (Number.isInteger(limit) && limit > 0)
-                list = list.slice(0, limit);
-            return list;
+        else if (!includeAll) {
+            query += " AND status <> 'CANCELLED'";
         }
+        if (filters.upcoming === 'true')
+            query += ' AND event_date >= CURDATE()';
+        query += filters.upcoming === 'true' ? ' ORDER BY event_date ASC, start_time ASC' : ' ORDER BY event_date DESC, start_time ASC';
+        if (filters.limit) {
+            query += ' LIMIT ?';
+            params.push(Math.min(Number(filters.limit) || 10, 100));
+        }
+        const [rows] = await db.query(query, params);
+        return rows;
     }
-    static async getEventById(idOrSlug) {
+    static async get(idOrSlug) {
         const db = await (0, database_1.getDbConnection)();
-        if (db) {
-            const [rows] = await db.query('SELECT * FROM tblEvents WHERE id = ? OR slug = ?', [idOrSlug, idOrSlug]);
-            return rows[0] || null;
-        }
-        else {
-            return database_1.mockDbStore.events.find(e => e.id === Number(idOrSlug) || e.slug === String(idOrSlug)) || null;
-        }
+        const [rows] = await db.query('SELECT * FROM tblEvents WHERE id = ? OR slug = ? LIMIT 1', [Number(idOrSlug) || 0, idOrSlug]);
+        return rows[0] || null;
     }
-    static async createEvent(data, organizerId) {
+    static async create(data, organizerId) {
+        validate(data);
         const db = await (0, database_1.getDbConnection)();
-        const slug = data.slug || data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-        if (db) {
-            const [res] = await db.query(`INSERT INTO tblEvents (organizer_id, title, title_ta, slug, description, description_ta, location, venue_address, event_date, start_time, end_time, cover_image, capacity, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-                organizerId,
-                data.title,
-                data.title_ta || null,
-                slug,
-                data.description,
-                data.description_ta || null,
-                data.location,
-                data.venue_address,
-                data.event_date,
-                data.start_time,
-                data.end_time || null,
-                data.cover_image || null,
-                data.capacity || 300,
-                data.status || 'UPCOMING',
-            ]);
-            return { id: res.insertId, ...data, slug };
-        }
-        else {
-            const newObj = {
-                id: database_1.mockDbStore.events.length + 1,
-                organizer_id: organizerId,
-                title: data.title,
-                slug,
-                description: data.description,
-                location: data.location,
-                venue_address: data.venue_address,
-                event_date: data.event_date,
-                start_time: data.start_time,
-                end_time: data.end_time || '17:00:00',
-                cover_image: data.cover_image || 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=800',
-                status: data.status || 'UPCOMING',
-                capacity: Number(data.capacity || 300),
-            };
-            database_1.mockDbStore.events.unshift(newObj);
-            return newObj;
-        }
+        const [res] = await db.query(`INSERT INTO tblEvents (organizer_id, title, title_ta, slug, description, description_ta, location, venue_address,
+         event_date, start_time, end_time, cover_image, capacity, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            organizerId,
+            String(data.title).trim(),
+            (0, content_1.pickOptional)(data, 'title_ta'),
+            (0, content_1.slugify)(data.title),
+            String(data.description),
+            (0, content_1.pickOptional)(data, 'description_ta'),
+            String(data.location).trim(),
+            (0, content_1.pickOptional)(data, 'venue_address'),
+            data.event_date,
+            data.start_time,
+            (0, content_1.pickOptional)(data, 'end_time'),
+            (0, content_1.pickOptional)(data, 'cover_image'),
+            Number(data.capacity) || 500,
+            (0, content_1.oneOf)(data.status, STATUSES, 'UPCOMING'),
+        ]);
+        return this.get(String(res.insertId));
     }
-    static async updateEvent(id, data) {
-        const db = await (0, database_1.getDbConnection)();
-        if (!db)
-            throw new Error('Database connection unavailable.');
-        const existing = await this.getEventById(id);
+    static async update(id, data) {
+        const existing = await this.get(String(id));
         if (!existing)
-            return null;
-        await db.query(`UPDATE tblEvents SET title=?, title_ta=?, description=?, description_ta=?, location=?, venue_address=?, event_date=?, start_time=?, end_time=?, cover_image=?, capacity=?, status=?
-       WHERE id=?`, [
-            data.title ?? existing.title,
-            data.title_ta ?? existing.title_ta ?? null,
-            data.description ?? existing.description,
-            data.description_ta ?? existing.description_ta ?? null,
-            data.location ?? existing.location,
-            data.venue_address !== undefined ? data.venue_address : existing.venue_address,
-            data.event_date ?? existing.event_date,
-            data.start_time ?? existing.start_time,
-            data.end_time !== undefined ? data.end_time : existing.end_time,
-            data.cover_image !== undefined ? data.cover_image : existing.cover_image,
-            data.capacity ?? existing.capacity,
-            data.status ?? existing.status,
+            throw new types_1.HttpError(404, 'Event not found', 'NOT_FOUND');
+        const merged = { ...existing, ...data };
+        validate(merged);
+        const db = await (0, database_1.getDbConnection)();
+        await db.query(`UPDATE tblEvents SET title = ?, title_ta = ?, description = ?, description_ta = ?, location = ?, venue_address = ?,
+         event_date = ?, start_time = ?, end_time = ?, cover_image = ?, capacity = ?, status = ? WHERE id = ?`, [
+            String(merged.title).trim(),
+            (0, content_1.pickOptional)(merged, 'title_ta'),
+            String(merged.description),
+            (0, content_1.pickOptional)(merged, 'description_ta'),
+            String(merged.location).trim(),
+            (0, content_1.pickOptional)(merged, 'venue_address'),
+            merged.event_date,
+            merged.start_time,
+            (0, content_1.pickOptional)(merged, 'end_time'),
+            (0, content_1.pickOptional)(merged, 'cover_image'),
+            Number(merged.capacity) || 500,
+            (0, content_1.oneOf)(merged.status, STATUSES, 'UPCOMING'),
             id,
         ]);
-        return this.getEventById(id);
+        return this.get(String(id));
     }
-    static async deleteEvent(id) {
+    static async remove(id) {
         const db = await (0, database_1.getDbConnection)();
-        if (!db)
-            throw new Error('Database connection unavailable.');
         const [res] = await db.query('DELETE FROM tblEvents WHERE id = ?', [id]);
-        return res.affectedRows > 0;
+        if (res.affectedRows === 0)
+            throw new types_1.HttpError(404, 'Event not found', 'NOT_FOUND');
     }
 }
 exports.EventService = EventService;

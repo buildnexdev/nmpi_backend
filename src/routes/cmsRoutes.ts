@@ -9,13 +9,9 @@ import {
   listPages,
   getPage,
   savePage,
-  listUploads,
-  uploadMedia,
-  deleteUpload,
 } from '../controllers/cmsController';
 import { authenticateJWT } from '../middleware/authMiddleware';
 import { requireRoles } from '../middleware/rbacMiddleware';
-import { uploadMediaImage } from '../middleware/uploadMiddleware';
 import { CONTENT_ADMIN_ROLES } from '../constants';
 
 const router = Router();
@@ -31,9 +27,5 @@ router.delete('/leadership/:id', ...admins, deleteLeader);
 router.get('/pages', ...admins, listPages);
 router.get('/pages/:key', getPage);
 router.put('/pages/:key', ...admins, savePage);
-
-router.get('/uploads/list', listUploads);
-router.post('/uploads', ...admins, uploadMediaImage.single('file') as any, uploadMedia);
-router.delete('/uploads/:filename', ...admins, deleteUpload);
 
 export default router;

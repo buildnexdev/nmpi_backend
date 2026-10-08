@@ -21,26 +21,20 @@ const accessRoutes_1 = __importDefault(require("./routes/accessRoutes"));
 const uploadRoutes_1 = __importDefault(require("./routes/uploadRoutes"));
 const errorHandler_1 = require("./middleware/errorHandler");
 const app = (0, express_1.default)();
-// Security and Logging Middlewares
 app.use((0, helmet_1.default)({ crossOriginResourcePolicy: false }));
-app.use((0, cors_1.default)({ origin: '*', credentials: true }));
+app.use((0, cors_1.default)({ origin: '*', exposedHeaders: ['Content-Disposition'] }));
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 app.use((0, morgan_1.default)('dev'));
-// Rate Limiting
-const limiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 300,
-    message: { success: false, message: 'Too many requests, please try again later.' },
-});
-app.use('/api/', limiter);
-// Static Uploads Folder
+app.use('/api/', (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 1000,
+    message: { success: false, message: 'Too many requests, please try again later.', data: null },
+}));
 app.use('/uploads', express_1.default.static(path_1.default.join(process.cwd(), 'uploads')));
-// Health check endpoint
 app.get('/health', (req, res) => {
-    res.json({ status: 'UP', service: 'Community Platform Backend API', timestamp: new Date().toISOString() });
+    res.json({ status: 'UP', service: 'NMPI Platform API', timestamp: new Date().toISOString() });
 });
-// Register API Route Modules
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/members', memberRoutes_1.default);
 app.use('/api/master-data', masterDataRoutes_1.default);
@@ -51,10 +45,8 @@ app.use('/api/dashboard', dashboardRoutes_1.default);
 app.use('/api/access', accessRoutes_1.default);
 app.use('/api/uploads', uploadRoutes_1.default);
 app.use('/api', cmsRoutes_1.default);
-// 404 Route Fallback
 app.use((req, res) => {
     res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found`, data: null, error: { code: 'NOT_FOUND' } });
 });
-// Centralized Error Handler
 app.use(errorHandler_1.errorHandler);
 exports.default = app;

@@ -154,6 +154,7 @@ export class MemberService {
   static async registerMember(data: any, profileFile?: Express.Multer.File) {
     try {
       this.validateRegistration(data);
+      if (!profileFile) throw fieldError('profile_image', 'Profile photo is required.');
     } catch (err) {
       if (profileFile) fs.unlink(profileFile.path, () => {});
       throw err;
@@ -201,7 +202,7 @@ export class MemberService {
       // System access is always "Member"; coordinator/admin access is granted by an administrator.
       await conn.query('INSERT INTO tblUser_roles (user_id, role_id) VALUES (?, ?)', [userId, ROLE_IDS.MEMBER]);
 
-      const memberIdCode = generateMemberId(userId, parliamentCode);
+      const pendingMemberId = `TMP-${userId}-${Date.now()}`;
 
       const [memberResult]: any = await conn.query(
         `INSERT INTO tblMembers (
@@ -213,7 +214,7 @@ export class MemberService {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED')`,
         [
           userId,
-          memberIdCode,
+          pendingMemberId,
           String(data.full_name).trim(),
           String(data.father_name).trim(),
           data.date_of_birth,
@@ -239,6 +240,8 @@ export class MemberService {
         ]
       );
       const memberDbId = memberResult.insertId;
+      const memberIdCode = generateMemberId(memberDbId, parliamentCode);
+      await conn.query('UPDATE tblMembers SET member_id = ? WHERE id = ?', [memberIdCode, memberDbId]);
 
       const verificationToken = `TOKEN-${crypto.randomBytes(16).toString('hex').toUpperCase()}`;
       await conn.query('INSERT INTO tblMember_qr_codes (member_id, verification_token) VALUES (?, ?)', [memberDbId, verificationToken]);
@@ -260,8 +263,10 @@ export class MemberService {
     const db = await getDbConnection();
     const [rows]: any = await db.query(
       `SELECT
-        m.member_id, m.full_name, m.gender, m.profile_image, m.blood_group, m.status, m.created_at,
-        pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta,
+        m.member_id, m.full_name, m.father_name, m.date_of_birth, m.gender,
+        m.country_code, m.phone_number, m.email, m.profile_image, m.blood_group,
+        m.address_line1, m.village_custom, m.status, m.created_at,
+        pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta, pc.code AS parliament_code,
         ac.name_en AS assembly_name, ac.name_ta AS assembly_name_ta,
         d.name_en AS district_name, d.name_ta AS district_name_ta,
         b.name_en AS block_name, b.name_ta AS block_name_ta,

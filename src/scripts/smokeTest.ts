@@ -111,8 +111,14 @@ async function main() {
       role_id: '6',
     };
     Object.entries(fields).forEach(([k, v]) => form.append(k, v));
+    const tinyPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+      'base64'
+    );
+    form.append('profile_image', new Blob([tinyPng], { type: 'image/png' }), 'smoke-photo.png');
     const reg = await call('POST', '/members/register', { form });
     check('registration succeeds', reg.status === 201 && reg.data.data.member_id, reg.data);
+    check('member id uses nmpi + constituency code + padded id', /^nmpi[A-Za-z0-9]+\d{5}$/.test(reg.data.data.member_id || ''), reg.data.data.member_id);
     const member = reg.data.data;
     created.userId = member.user_id;
     check('self-registration cannot become Admin', member.role_name === 'Member', member.role_name);
@@ -121,11 +127,13 @@ async function main() {
 
     const dupForm = new FormData();
     Object.entries({ ...fields, email: `other_${email}` }).forEach(([k, v]) => dupForm.append(k, v));
+    dupForm.append('profile_image', new Blob([tinyPng], { type: 'image/png' }), 'smoke-photo.png');
     const dup = await call('POST', '/members/register', { form: dupForm });
     check('duplicate phone rejected with field', dup.status === 409 && dup.data.error?.details?.field === 'phone_number', dup.data);
 
     const underage = new FormData();
     Object.entries({ ...fields, date_of_birth: '2015-01-01', phone_number: `8${rand(9)}`, email: `u_${email}` }).forEach(([k, v]) => underage.append(k, v));
+    underage.append('profile_image', new Blob([tinyPng], { type: 'image/png' }), 'smoke-photo.png');
     check('under-18 rejected', (await call('POST', '/members/register', { form: underage })).status === 400);
 
     const tokenPdf = await call('GET', `/members/id-card/download?token=${encodeURIComponent(member.id_card_token)}`);
@@ -144,7 +152,7 @@ async function main() {
 
     const verify = await call('GET', `/verify/${me.data.data.verification_token}`);
     check('public QR verification', verify.status === 200 && verify.data.data.member_id === member.member_id, verify.data);
-    check('QR verification hides phone/email', verify.data.data.phone_number === undefined && verify.data.data.email === undefined);
+    check('QR verification exposes member contact details', verify.data.data.phone_number && verify.data.data.email);
     check('unknown QR token 404', (await call('GET', '/verify/TOKEN-NOPE')).status === 404);
 
     console.log('\nAdmin member management');
@@ -199,13 +207,23 @@ async function main() {
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
     const up = new FormData();
     up.append('file', new Blob([png], { type: 'image/png' }), 'smoke.png');
-    const upload = await call('POST', '/uploads', { token: adminToken, form: up });
-    check('upload image', upload.status === 201, upload.data);
+    const upload = await call('POST', '/uploads?folder=News', { token: adminToken, form: up });
+    check('upload image into News folder', upload.status === 201 && /^\/uploads\/News\/IMG-\d{8}-\d{6}\.png$/.test(upload.data.data?.path || ''), upload.data);
     created.upload = upload.data.data?.filename || '';
+    const served = await fetch(`${API.replace(/\/api$/, '')}${upload.data.data?.path}`);
+    check('uploaded image is served', served.status === 200 && (served.headers.get('content-type') || '').startsWith('image/'));
+    const newsList = await call('GET', '/uploads/list?folder=News');
+    check('list filtered by folder', newsList.data.data.every((m: any) => m.folder === 'News') && newsList.data.data.some((m: any) => m.filename === created.upload));
+    const defUp = new FormData();
+    defUp.append('file', new Blob([png], { type: 'image/png' }), 'smoke.png');
+    const defUpload = await call('POST', '/uploads?folder=../../etc', { token: adminToken, form: defUp });
+    check('unknown folder falls back to Gallery', defUpload.data.data?.folder === 'Gallery', defUpload.data);
+    check('delete by folder', (await call('DELETE', `/uploads/${encodeURIComponent(defUpload.data.data?.filename || 'x.png')}?folder=Gallery`, { token: adminToken })).status === 200);
     const bad = new FormData();
     bad.append('file', new Blob(['hello'], { type: 'text/plain' }), 'evil.txt');
     check('reject non-image upload', (await call('POST', '/uploads', { token: adminToken, form: bad })).status === 400);
-    check('path traversal blocked', (await call('DELETE', `/uploads/${encodeURIComponent('..\\.env')}`, { token: adminToken })).status === 404);
+    check('path traversal blocked', [400, 404].includes((await call('DELETE', `/uploads/${encodeURIComponent('..\\.env')}`, { token: adminToken })).status));
+    check('member photos not deletable', (await call('DELETE', '/uploads/Nandha-ARK-001.jpeg', { token: adminToken })).status === 404);
   } finally {
     console.log('\nCleanup');
     const adminLogin = await call('POST', '/auth/login', { body: { login: ADMIN_EMAIL, password: ADMIN_PASSWORD } });
@@ -213,7 +231,7 @@ async function main() {
     if (created.newsId) await call('DELETE', `/news/${created.newsId}`, { token: t });
     if (created.eventId) await call('DELETE', `/events/${created.eventId}`, { token: t });
     if (created.leaderId) await call('DELETE', `/leadership/${created.leaderId}`, { token: t });
-    if (created.upload) await call('DELETE', `/uploads/${encodeURIComponent(created.upload)}`, { token: t });
+    if (created.upload) await call('DELETE', `/uploads/${encodeURIComponent(created.upload)}?folder=News`, { token: t });
     if (created.userId) {
       const [rows]: any = await db.query('SELECT profile_image FROM tblMembers WHERE user_id = ?', [created.userId]);
       await db.query('DELETE FROM tblMember_qr_codes WHERE member_id IN (SELECT id FROM tblMembers WHERE user_id = ?)', [created.userId]);

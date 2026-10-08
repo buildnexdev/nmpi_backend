@@ -3,10 +3,6 @@ import { CmsService } from '../services/cmsService';
 import { DashboardService } from '../services/dashboardService';
 import { sendSuccess, sendError } from '../utils/response';
 
-function baseUrl(req: Request): string {
-  return process.env.PUBLIC_API_URL || `${req.protocol}://${req.get('host')}`;
-}
-
 export async function getPublicStats(req: Request, res: Response, next: NextFunction) {
   try {
     return sendSuccess(res, 'Public statistics retrieved', await CmsService.getPublicStats());
@@ -82,29 +78,3 @@ export async function savePage(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-export async function listUploads(req: Request, res: Response, next: NextFunction) {
-  try {
-    return sendSuccess(res, 'Uploads retrieved', CmsService.listUploads(baseUrl(req)));
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function uploadMedia(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.file) return sendError(res, 'Please choose an image to upload', 'VALIDATION_ERROR', 400);
-    const filePath = `/uploads/${encodeURIComponent(req.file.filename)}`;
-    return sendSuccess(res, 'Image uploaded', { filename: req.file.filename, path: filePath, url: `${baseUrl(req)}${filePath}` }, 201);
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function deleteUpload(req: Request, res: Response, next: NextFunction) {
-  try {
-    CmsService.deleteUpload(req.params.filename);
-    return sendSuccess(res, 'File deleted');
-  } catch (err) {
-    next(err);
-  }
-}

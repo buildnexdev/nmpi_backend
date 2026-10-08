@@ -2,13 +2,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateMemberId = generateMemberId;
 /**
- * Generates a unique Member ID based on Parliament Constituency Code.
- * Format: 001[PARLIAMENT_CODE][5_DIGIT_SEQ]
- * Example: generateMemberId(42131, 'TR') -> "001TR42131"
+ * Public member ID: nmpi + parliament constituency code + zero-padded tblMembers.id
+ * Example: nmpi + Ar + 01110 → nmpiAr01110
  */
-function generateMemberId(sequenceId, parliamentCode = 'TN') {
-    const code = (parliamentCode || 'TN').toUpperCase().trim();
-    const paddedSeq = sequenceId.toString().padStart(5, '0');
-    const prefix = '001';
-    return `${prefix}${code}${paddedSeq}`;
+function generateMemberId(memberDbId, parliamentCode = 'TN') {
+    const code = String(parliamentCode || 'TN').trim();
+    const seq = String(memberDbId).padStart(5, '0');
+    return `nmpi${code}${seq}`;
 }

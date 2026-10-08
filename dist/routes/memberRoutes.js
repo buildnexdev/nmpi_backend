@@ -3,37 +3,27 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const memberController_1 = require("../controllers/memberController");
 const uploadMiddleware_1 = require("../middleware/uploadMiddleware");
-const response_1 = require("../utils/response");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const rbacMiddleware_1 = require("../middleware/rbacMiddleware");
-const roles_1 = require("../utils/roles");
+const constants_1 = require("../constants");
 const router = (0, express_1.Router)();
-// Wrap multer so invalid / oversized images come back as a clean 400 on the profile_image field
-function handleProfileUpload(req, res, next) {
-    // `as any`: @types/multer ships its own copy of express-serve-static-core, so the Request types don't unify
-    uploadMiddleware_1.uploadProfileImage.single('profile_image')(req, res, (err) => {
-        if (!err)
-            return next();
-        const message = err.code === 'LIMIT_FILE_SIZE'
-            ? 'The image must be smaller than 5 MB.'
-            : err.message || 'Invalid profile image.';
-        return (0, response_1.sendError)(res, message, 'VALIDATION_ERROR', 400, { field: 'profile_image' });
-    });
-}
-// Public registration & duplicate check endpoints
+// Public registration & duplicate checks
 router.get('/check-phone', memberController_1.checkPhone);
 router.get('/check-email', memberController_1.checkEmail);
 router.get('/check-aadhaar', memberController_1.checkAadhaar);
 router.get('/check-voter-id', memberController_1.checkVoterId);
-router.post('/register', handleProfileUpload, memberController_1.registerMember);
-// Authenticated member portal (must be before /:id and /:memberId wildcards)
+router.post('/register', uploadMiddleware_1.uploadProfileImage.single('profile_image'), memberController_1.registerMember);
+router.get('/id-card/download', memberController_1.downloadIdCardWithToken);
+// Logged-in member
 router.get('/me', authMiddleware_1.authenticateJWT, memberController_1.getMyProfile);
 router.get('/me/id-card', authMiddleware_1.authenticateJWT, memberController_1.downloadMyIdCard);
-// ID card downloads (token route must be declared before the /:memberId wildcard)
-router.get('/id-card/download', memberController_1.downloadIdCardByToken);
-router.get('/:memberId/id-card', memberController_1.downloadIdCardPdf);
-// General member endpoints
-router.get('/', authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)([...roles_1.STAFF_ROLE_CODES]), memberController_1.getMembers);
-router.get('/:id', memberController_1.getMemberById);
-router.get('/:id/qr', memberController_1.getMemberQr);
+// Staff / administrators
+const staff = [authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)(constants_1.STAFF_ROLES)];
+const admins = [authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)(constants_1.CONTENT_ADMIN_ROLES)];
+router.get('/', ...staff, memberController_1.getMembers);
+router.get('/export.csv', ...staff, memberController_1.exportMembersCsv);
+router.get('/:id', ...staff, memberController_1.getMemberById);
+router.get('/:id/id-card', ...staff, memberController_1.downloadMemberIdCard);
+router.patch('/:id/status', ...staff, memberController_1.updateMemberStatus);
+router.patch('/:id/role', ...admins, memberController_1.updateMemberRole);
 exports.default = router;

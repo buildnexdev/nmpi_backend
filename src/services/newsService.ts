@@ -4,6 +4,18 @@ import { slugify, requireFields, pickOptional, oneOf } from '../utils/content';
 
 const STATUSES = ['DRAFT', 'PUBLISHED'] as const;
 
+function pickDate(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const s = String(value).trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+function pickTime(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const m = String(value).trim().match(/^(\d{2}:\d{2})/);
+  return m ? `${m[1]}:00` : null;
+}
+
 export class NewsService {
   static async list(filters: any, includeDrafts: boolean) {
     const db = await getDbConnection();
@@ -45,8 +57,8 @@ export class NewsService {
     requireFields(data, [['title', 'Title'], ['summary', 'Summary'], ['content', 'Content']]);
     const db = await getDbConnection();
     const [res]: any = await db.query(
-      `INSERT INTO tblNews (author_id, category, title, title_ta, slug, summary, summary_ta, content, content_ta, cover_image, is_featured, status, published_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO tblNews (author_id, category, title, title_ta, slug, summary, summary_ta, content, content_ta, cover_image, place, place_ta, news_date, news_time, is_featured, status, published_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         authorId,
         pickOptional(data, 'category') || 'Announcement',
@@ -58,6 +70,10 @@ export class NewsService {
         String(data.content),
         pickOptional(data, 'content_ta'),
         pickOptional(data, 'cover_image'),
+        pickOptional(data, 'place'),
+        pickOptional(data, 'place_ta'),
+        pickDate(data.news_date),
+        pickTime(data.news_time),
         data.is_featured ? 1 : 0,
         oneOf(data.status, STATUSES, 'PUBLISHED'),
       ]
@@ -74,7 +90,7 @@ export class NewsService {
     const db = await getDbConnection();
     await db.query(
       `UPDATE tblNews SET category = ?, title = ?, title_ta = ?, summary = ?, summary_ta = ?, content = ?, content_ta = ?,
-         cover_image = ?, is_featured = ?, status = ? WHERE id = ?`,
+         cover_image = ?, place = ?, place_ta = ?, news_date = ?, news_time = ?, is_featured = ?, status = ? WHERE id = ?`,
       [
         pickOptional(merged, 'category') || 'Announcement',
         String(merged.title).trim(),
@@ -84,6 +100,10 @@ export class NewsService {
         String(merged.content),
         pickOptional(merged, 'content_ta'),
         pickOptional(merged, 'cover_image'),
+        pickOptional(merged, 'place'),
+        pickOptional(merged, 'place_ta'),
+        pickDate(merged.news_date),
+        pickTime(merged.news_time),
         merged.is_featured === true || merged.is_featured === 1 || merged.is_featured === '1' ? 1 : 0,
         oneOf(merged.status, STATUSES, 'PUBLISHED'),
         id,

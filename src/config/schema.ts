@@ -1,4 +1,5 @@
 import { Pool, PoolConnection } from 'mysql2/promise';
+import { ABOUT_PAGE_SEED } from './aboutPageContent';
 
 const TABLES: string[] = [
   `CREATE TABLE IF NOT EXISTS \`tblNews\` (
@@ -13,6 +14,10 @@ const TABLES: string[] = [
     \`content\` LONGTEXT NOT NULL,
     \`content_ta\` LONGTEXT NULL,
     \`cover_image\` VARCHAR(500) NULL,
+    \`place\` VARCHAR(255) NULL,
+    \`place_ta\` VARCHAR(255) NULL,
+    \`news_date\` DATE NULL,
+    \`news_time\` TIME NULL,
     \`is_featured\` TINYINT(1) NOT NULL DEFAULT 0,
     \`status\` ENUM('DRAFT', 'PUBLISHED') NOT NULL DEFAULT 'PUBLISHED',
     \`published_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -84,20 +89,11 @@ const SEED_LEADERS = [
 
 const SEED_PAGES = [
   {
-    key: 'about',
-    title: 'About the Movement',
-    title_ta: 'இயக்கம் பற்றி',
-    content:
-      '<p>Netaji Makkal Pathukappu Iyakkam is a disciplined people\'s movement inspired by the ideals of Netaji Subhas Chandra Bose, working for the rights, welfare and safety of the people of Tamil Nadu.</p>',
-    content_ta:
-      '<p>நேதாஜி மக்கள் பாதுகாப்பு இயக்கம், நேதாஜி சுபாஷ் சந்திர போஸ் அவர்களின் கொள்கை வழியில் தமிழக மக்களின் உரிமைகள், நலன் மற்றும் பாதுகாப்பிற்காக செயல்படும் ஒழுக்கமிக்க மக்கள் இயக்கம்.</p>',
-  },
-  {
-    key: 'history',
-    title: 'Our History',
-    title_ta: 'இயக்க வரலாறு',
-    content: '<p>From a small group of volunteers, the movement has grown into a structured organisation spanning every district of Tamil Nadu.</p>',
-    content_ta: '<p>சிறு தன்னார்வலர் குழுவாகத் தொடங்கிய இயக்கம், இன்று தமிழகத்தின் அனைத்து மாவட்டங்களிலும் பரந்து விரிந்த அமைப்பாக வளர்ந்துள்ளது.</p>',
+    key: ABOUT_PAGE_SEED.key,
+    title: ABOUT_PAGE_SEED.title,
+    title_ta: ABOUT_PAGE_SEED.title_ta,
+    content: ABOUT_PAGE_SEED.content,
+    content_ta: ABOUT_PAGE_SEED.content_ta,
   },
   {
     key: 'structure',
@@ -120,10 +116,27 @@ export async function ensureSchema(pool: Pool): Promise<void> {
   }
 }
 
+async function ensureNewsColumns(db: PoolConnection): Promise<void> {
+  const alters = [
+    'ADD COLUMN `place` VARCHAR(255) NULL AFTER `cover_image`',
+    'ADD COLUMN `place_ta` VARCHAR(255) NULL AFTER `place`',
+    'ADD COLUMN `news_date` DATE NULL AFTER `place_ta`',
+    'ADD COLUMN `news_time` TIME NULL AFTER `news_date`',
+  ];
+  for (const clause of alters) {
+    try {
+      await db.query(`ALTER TABLE tblNews ${clause}`);
+    } catch (err: any) {
+      if (err?.code !== 'ER_DUP_FIELDNAME') throw err;
+    }
+  }
+}
+
 async function createAndSeed(db: PoolConnection): Promise<void> {
   for (const ddl of TABLES) {
     await db.query(ddl);
   }
+  await ensureNewsColumns(db);
 
   const [[leaderCount]]: any = await db.query('SELECT COUNT(*) AS c FROM tblLeaders');
   if (Number(leaderCount.c) === 0) {
@@ -137,10 +150,20 @@ async function createAndSeed(db: PoolConnection): Promise<void> {
     }
   }
 
+  await db.query("DELETE FROM tblOrganization_pages WHERE page_key = 'history'");
+
   for (const p of SEED_PAGES) {
-    await db.query(
-      `INSERT IGNORE INTO tblOrganization_pages (page_key, title, title_ta, content, content_ta) VALUES (?, ?, ?, ?, ?)`,
-      [p.key, p.title, p.title_ta, p.content, p.content_ta]
-    );
+    if (p.key === 'about') {
+      await db.query(
+        `INSERT INTO tblOrganization_pages (page_key, title, title_ta, content, content_ta) VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE title = VALUES(title), title_ta = VALUES(title_ta), content = VALUES(content), content_ta = VALUES(content_ta)`,
+        [p.key, p.title, p.title_ta, p.content, p.content_ta]
+      );
+    } else {
+      await db.query(
+        `INSERT IGNORE INTO tblOrganization_pages (page_key, title, title_ta, content, content_ta) VALUES (?, ?, ?, ?, ?)`,
+        [p.key, p.title, p.title_ta, p.content, p.content_ta]
+      );
+    }
   }
 }

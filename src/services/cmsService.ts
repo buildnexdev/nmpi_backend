@@ -1,9 +1,6 @@
-import fs from 'fs';
-import path from 'path';
 import { getDbConnection } from '../config/database';
 import { HttpError } from '../types';
 import { requireFields, pickOptional, oneOf } from '../utils/content';
-import { UPLOADS_ROOT, ALLOWED_IMAGE_EXTENSIONS } from '../middleware/uploadMiddleware';
 
 const LEADER_FIELDS = ['name_ta', 'designation_ta', 'district', 'district_ta', 'qualification', 'photo_url', 'phone', 'email', 'bio'];
 const PAGE_KEY_PATTERN = /^[a-z0-9_-]{2,50}$/;
@@ -98,32 +95,5 @@ export class CmsService {
       [pageKey, String(data.title).trim(), pickOptional(data, 'title_ta'), String(data.content), pickOptional(data, 'content_ta')]
     );
     return this.getPage(pageKey);
-  }
-
-  static listUploads(baseUrl: string) {
-    if (!fs.existsSync(UPLOADS_ROOT)) return [];
-    return fs
-      .readdirSync(UPLOADS_ROOT)
-      .filter((file) => ALLOWED_IMAGE_EXTENSIONS.includes(path.extname(file).toLowerCase()) || path.extname(file).toLowerCase() === '.gif')
-      .map((file) => {
-        const stats = fs.statSync(path.join(UPLOADS_ROOT, file));
-        return {
-          filename: file,
-          path: `/uploads/${encodeURIComponent(file)}`,
-          url: `${baseUrl}/uploads/${encodeURIComponent(file)}`,
-          size: stats.size,
-          updated_at: stats.mtime,
-        };
-      })
-      .sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime());
-  }
-
-  static deleteUpload(filename: string) {
-    const safeName = path.basename(filename);
-    const target = path.join(UPLOADS_ROOT, safeName);
-    if (safeName !== filename || !fs.existsSync(target) || !fs.statSync(target).isFile()) {
-      throw new HttpError(404, 'File not found', 'NOT_FOUND');
-    }
-    fs.unlinkSync(target);
   }
 }

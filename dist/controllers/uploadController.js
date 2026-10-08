@@ -9,65 +9,81 @@ exports.deleteUpload = deleteUpload;
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const response_1 = require("../utils/response");
+const uploadMiddleware_1 = require("../middleware/uploadMiddleware");
 const UPLOAD_ROOT = path_1.default.join(process.cwd(), 'uploads');
-const MEDIA_DIR = path_1.default.join(UPLOAD_ROOT, 'media');
+const LEGACY_MEDIA_DIR = path_1.default.join(UPLOAD_ROOT, 'media');
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
-function ensureMediaDir() {
-    if (!fs_1.default.existsSync(MEDIA_DIR))
-        fs_1.default.mkdirSync(MEDIA_DIR, { recursive: true });
-}
-function publicUrl(rel) {
-    return `/${rel.replace(/\\/g, '/')}`;
-}
-function fileInfo(abs, rel) {
+/** Loose files in uploads/ and the old uploads/media/ folder are reported under this name. */
+const GENERAL_FOLDER = 'General';
+/** Never listed or deletable here: member photos, profile pictures and QR codes are private. */
+const PRIVATE_DIRS = ['Member', 'profiles', 'qr'];
+const VIDEO_EXT = new Set([...uploadMiddleware_1.ALLOWED_VIDEO_EXTENSIONS]);
+function fileInfo(abs, rel, folder) {
     const stat = fs_1.default.statSync(abs);
-    return {
-        filename: path_1.default.basename(abs),
-        path: publicUrl(rel),
-        url: publicUrl(rel),
-        size: stat.size,
-        updated_at: stat.mtime.toISOString(),
-    };
+    const url = `/${rel.replace(/\\/g, '/')}`;
+    const ext = path_1.default.extname(abs).toLowerCase();
+    const kind = VIDEO_EXT.has(ext) ? 'video' : 'image';
+    return { filename: path_1.default.basename(abs), folder, path: url, url, size: stat.size, updated_at: stat.mtime.toISOString(), kind };
 }
-function collectImages(dir, prefix, skipDirs) {
+function collectMedia(dir, prefix, folder, allowed) {
     if (!fs_1.default.existsSync(dir))
         return [];
     const out = [];
     for (const name of fs_1.default.readdirSync(dir)) {
-        if (skipDirs.includes(name))
-            continue;
         const abs = path_1.default.join(dir, name);
-        const stat = fs_1.default.statSync(abs);
-        if (stat.isDirectory())
+        if (!fs_1.default.statSync(abs).isFile())
             continue;
-        if (!IMAGE_EXT.has(path_1.default.extname(name).toLowerCase()))
+        if (!allowed.has(path_1.default.extname(name).toLowerCase()))
             continue;
-        out.push(fileInfo(abs, path_1.default.join(prefix, name)));
+        out.push(fileInfo(abs, path_1.default.join(prefix, name), folder));
     }
     return out;
 }
-async function listUploads(_req, res, next) {
+function collectImages(dir, prefix, folder) {
+    return collectMedia(dir, prefix, folder, IMAGE_EXT);
+}
+function collectVideos(dir, prefix, folder) {
+    return collectMedia(dir, prefix, folder, VIDEO_EXT);
+}
+function collectFolder(folder) {
+    if (folder === GENERAL_FOLDER) {
+        return [
+            ...collectImages(UPLOAD_ROOT, 'uploads', GENERAL_FOLDER),
+            ...collectImages(LEGACY_MEDIA_DIR, 'uploads/media', GENERAL_FOLDER),
+        ];
+    }
+    if (folder === uploadMiddleware_1.VIDEO_MEDIA_FOLDER) {
+        return collectVideos(path_1.default.join(UPLOAD_ROOT, folder), `uploads/${folder}`, folder);
+    }
+    return collectImages(path_1.default.join(UPLOAD_ROOT, folder), `uploads/${folder}`, folder);
+}
+/** GET /api/uploads/list?folder=Gallery[,Events] — omit folder for every public folder. */
+async function listUploads(req, res, next) {
     try {
-        ensureMediaDir();
-        const media = collectImages(MEDIA_DIR, 'uploads/media', []);
-        const root = collectImages(UPLOAD_ROOT, 'uploads', ['media', 'profiles', 'qr']);
-        const items = [...media, ...root].sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+        const allFolders = [...uploadMiddleware_1.MEDIA_FOLDERS, GENERAL_FOLDER];
+        const requested = typeof req.query.folder === 'string' && req.query.folder.trim()
+            ? req.query.folder.split(',').map((f) => allFolders.find((x) => x.toLowerCase() === f.trim().toLowerCase())).filter(Boolean)
+            : allFolders;
+        const items = requested.flatMap(collectFolder).sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
         return (0, response_1.sendSuccess)(res, 'Uploads retrieved', items);
     }
     catch (err) {
         next(err);
     }
 }
+/** POST /api/uploads?folder=News — multipart field "file"; saved to uploads/<folder>/. */
 async function createUpload(req, res, next) {
     try {
         const file = req.file;
         if (!file)
-            return (0, response_1.sendError)(res, 'Choose an image file to upload.', 'VALIDATION_ERROR', 400);
-        const rel = `uploads/media/${file.filename}`;
+            return (0, response_1.sendError)(res, 'Choose a file to upload.', 'VALIDATION_ERROR', 400);
+        const folder = req.mediaFolder ?? uploadMiddleware_1.DEFAULT_MEDIA_FOLDER;
+        const url = `/uploads/${folder}/${file.filename}`;
         return (0, response_1.sendSuccess)(res, 'File uploaded', {
             filename: file.filename,
-            path: `/${rel}`,
-            url: `/${rel}`,
+            folder,
+            path: url,
+            url,
             size: file.size,
         }, 201);
     }
@@ -75,21 +91,32 @@ async function createUpload(req, res, next) {
         next(err);
     }
 }
+/** DELETE /api/uploads/:filename?folder=Gallery — without folder, the first public match is removed. */
 async function deleteUpload(req, res, next) {
     try {
         const name = path_1.default.basename(req.params.filename || '');
-        if (!name || name === '.' || name === '..') {
+        const ext = path_1.default.extname(name).toLowerCase();
+        const allowedExt = IMAGE_EXT.has(ext) || VIDEO_EXT.has(ext);
+        if (!name || name === '.' || name === '..' || !allowedExt) {
             return (0, response_1.sendError)(res, 'Invalid filename', 'VALIDATION_ERROR', 400);
         }
-        const candidates = [path_1.default.join(MEDIA_DIR, name), path_1.default.join(UPLOAD_ROOT, name)];
-        const target = candidates.find((p) => fs_1.default.existsSync(p) && fs_1.default.statSync(p).isFile());
+        const folderParam = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+        const mediaFolder = (0, uploadMiddleware_1.resolveMediaFolder)(folderParam);
+        if (folderParam && !mediaFolder && folderParam.toLowerCase() !== GENERAL_FOLDER.toLowerCase()) {
+            return (0, response_1.sendError)(res, 'Unknown folder', 'VALIDATION_ERROR', 400);
+        }
+        const dirs = mediaFolder
+            ? [path_1.default.join(UPLOAD_ROOT, mediaFolder)]
+            : folderParam
+                ? [UPLOAD_ROOT, LEGACY_MEDIA_DIR]
+                : [...uploadMiddleware_1.MEDIA_FOLDERS.map((f) => path_1.default.join(UPLOAD_ROOT, f)), UPLOAD_ROOT, LEGACY_MEDIA_DIR];
+        const target = dirs.map((dir) => path_1.default.join(dir, name)).find((p) => fs_1.default.existsSync(p) && fs_1.default.statSync(p).isFile());
         if (!target)
             return (0, response_1.sendError)(res, 'File not found', 'NOT_FOUND', 404);
         const resolved = path_1.default.resolve(target);
-        if (!resolved.startsWith(path_1.default.resolve(UPLOAD_ROOT))) {
-            return (0, response_1.sendError)(res, 'Invalid filename', 'VALIDATION_ERROR', 400);
-        }
-        if (resolved.includes(`${path_1.default.sep}profiles${path_1.default.sep}`) || resolved.includes(`${path_1.default.sep}qr${path_1.default.sep}`)) {
+        const root = path_1.default.resolve(UPLOAD_ROOT);
+        const relTop = path_1.default.relative(root, resolved).split(path_1.default.sep)[0];
+        if (!resolved.startsWith(root + path_1.default.sep) || PRIVATE_DIRS.includes(relTop)) {
             return (0, response_1.sendError)(res, 'This file cannot be deleted here.', 'FORBIDDEN', 403);
         }
         fs_1.default.unlinkSync(resolved);

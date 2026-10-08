@@ -11,7 +11,9 @@ const router = (0, express_1.Router)();
 const staff = [authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)([...roles_1.STAFF_ROLE_CODES])];
 router.get('/list', uploadController_1.listUploads);
 router.post('/', authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)([...roles_1.STAFF_ROLE_CODES]), (req, res, next) => {
-    uploadMiddleware_1.uploadMediaImage.single('file')(req, res, (err) => {
+    const isVideo = (0, uploadMiddleware_1.resolveMediaFolder)(req.query.folder) === uploadMiddleware_1.VIDEO_MEDIA_FOLDER;
+    const uploader = isVideo ? uploadMiddleware_1.uploadMediaVideo : uploadMiddleware_1.uploadMediaImage;
+    uploader.single('file')(req, res, (err) => {
         if (err)
             return (0, response_1.sendError)(res, err.message || 'Upload failed', 'VALIDATION_ERROR', 400);
         next();

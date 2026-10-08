@@ -1,40 +1,32 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getEvents = getEvents;
-exports.getEventsAdminList = getEventsAdminList;
-exports.getEventById = getEventById;
+exports.listEvents = listEvents;
+exports.listAllEvents = listAllEvents;
+exports.getEvent = getEvent;
 exports.createEvent = createEvent;
 exports.updateEvent = updateEvent;
 exports.deleteEvent = deleteEvent;
 const eventService_1 = require("../services/eventService");
 const response_1 = require("../utils/response");
-async function getEvents(req, res, next) {
+async function listEvents(req, res, next) {
     try {
-        const events = await eventService_1.EventService.getEvents({
-            status: req.query.status,
-            upcoming: req.query.upcoming === 'true' || req.query.upcoming === '1',
-            limit: req.query.limit,
-        });
-        return (0, response_1.sendSuccess)(res, 'Events list retrieved', events);
+        return (0, response_1.sendSuccess)(res, 'Events list retrieved', await eventService_1.EventService.list(req.query, false));
     }
     catch (err) {
         next(err);
     }
 }
-async function getEventsAdminList(req, res, next) {
+async function listAllEvents(req, res, next) {
     try {
-        const events = await eventService_1.EventService.getEvents({
-            status: req.query.status,
-        });
-        return (0, response_1.sendSuccess)(res, 'Events list retrieved', events);
+        return (0, response_1.sendSuccess)(res, 'Events list retrieved', await eventService_1.EventService.list(req.query, true));
     }
     catch (err) {
         next(err);
     }
 }
-async function getEventById(req, res, next) {
+async function getEvent(req, res, next) {
     try {
-        const event = await eventService_1.EventService.getEventById(req.params.id);
+        const event = await eventService_1.EventService.get(req.params.id);
         if (!event)
             return (0, response_1.sendError)(res, 'Event not found', 'NOT_FOUND', 404);
         return (0, response_1.sendSuccess)(res, 'Event retrieved', event);
@@ -45,9 +37,7 @@ async function getEventById(req, res, next) {
 }
 async function createEvent(req, res, next) {
     try {
-        const organizerId = req.user?.id || 1;
-        const result = await eventService_1.EventService.createEvent(req.body, organizerId);
-        return (0, response_1.sendSuccess)(res, 'Event created successfully', result, 201);
+        return (0, response_1.sendSuccess)(res, 'Event created', await eventService_1.EventService.create(req.body, req.user.id), 201);
     }
     catch (err) {
         next(err);
@@ -55,13 +45,7 @@ async function createEvent(req, res, next) {
 }
 async function updateEvent(req, res, next) {
     try {
-        const id = Number(req.params.id);
-        if (!Number.isInteger(id) || id <= 0)
-            return (0, response_1.sendError)(res, 'Invalid event id', 'VALIDATION_ERROR', 400);
-        const result = await eventService_1.EventService.updateEvent(id, req.body);
-        if (!result)
-            return (0, response_1.sendError)(res, 'Event not found', 'NOT_FOUND', 404);
-        return (0, response_1.sendSuccess)(res, 'Event updated', result);
+        return (0, response_1.sendSuccess)(res, 'Event updated', await eventService_1.EventService.update(Number(req.params.id), req.body));
     }
     catch (err) {
         next(err);
@@ -69,13 +53,8 @@ async function updateEvent(req, res, next) {
 }
 async function deleteEvent(req, res, next) {
     try {
-        const id = Number(req.params.id);
-        if (!Number.isInteger(id) || id <= 0)
-            return (0, response_1.sendError)(res, 'Invalid event id', 'VALIDATION_ERROR', 400);
-        const ok = await eventService_1.EventService.deleteEvent(id);
-        if (!ok)
-            return (0, response_1.sendError)(res, 'Event not found', 'NOT_FOUND', 404);
-        return (0, response_1.sendSuccess)(res, 'Event deleted', { id });
+        await eventService_1.EventService.remove(Number(req.params.id));
+        return (0, response_1.sendSuccess)(res, 'Event deleted');
     }
     catch (err) {
         next(err);

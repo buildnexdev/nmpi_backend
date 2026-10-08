@@ -22,10 +22,19 @@ export const getStates = listHandler('States retrieved successfully', () => ({
   params: [],
 }));
 
-export const getParliaments = listHandler('Parliament constituencies retrieved successfully', (req) => ({
-  sql: `SELECT id, state_id, name_en, name_ta, code FROM tblParliament_constituencies WHERE state_id = ? AND status = 'ACTIVE' ORDER BY name_en ASC`,
-  params: [Number(req.query.stateId) || 1],
-}));
+export const getParliaments = listHandler('Parliament constituencies retrieved successfully', (req) => {
+  const stateId = Number(req.query.stateId);
+  if (stateId > 0) {
+    return {
+      sql: `SELECT id, state_id, name_en, name_ta, code FROM tblParliament_constituencies WHERE state_id = ? AND status = 'ACTIVE' ORDER BY name_en ASC`,
+      params: [stateId],
+    };
+  }
+  return {
+    sql: `SELECT id, state_id, name_en, name_ta, code FROM tblParliament_constituencies WHERE status = 'ACTIVE' ORDER BY name_en ASC`,
+    params: [],
+  };
+});
 
 export const getAssemblies = listHandler('Assembly constituencies retrieved successfully', (req) => {
   const parliamentId = Number(req.query.parliamentId) || null;

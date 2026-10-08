@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AccessService = void 0;
 const database_1 = require("../config/database");
+const types_1 = require("../types");
 const roles_1 = require("../utils/roles");
 async function ensureTable(db) {
     await db.query(`
@@ -81,7 +82,7 @@ class AccessService {
     }
     static async saveMatrix(items, actorRoles) {
         if (!(0, roles_1.isPortalAdmin)(actorRoles)) {
-            throw Object.assign(new Error('Only Admin and Super Admin can change role access.'), { status: 403 });
+            throw new types_1.HttpError(403, 'Only Admin and Super Admin can change role access.', 'FORBIDDEN');
         }
         const db = await (0, database_1.getDbConnection)();
         if (!db)

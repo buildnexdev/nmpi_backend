@@ -4,300 +4,195 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MemberService = void 0;
-exports.fieldError = fieldError;
-exports.normalizeRegistrationInput = normalizeRegistrationInput;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const crypto_1 = __importDefault(require("crypto"));
+const fs_1 = __importDefault(require("fs"));
 const database_1 = require("../config/database");
 const generateMemberId_1 = require("../functions/generateMemberId");
 const security_1 = require("../utils/security");
 const qrCodeGenerator_1 = require("../utils/qrCodeGenerator");
-const GENDERS = ['MALE', 'FEMALE', 'OTHER'];
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-', 'Unknown'];
-function fieldError(field, message) {
-    return { field, message };
-}
-function str(value) {
-    return value === undefined || value === null ? '' : String(value).trim();
-}
-function optionalId(value) {
-    const s = str(value);
-    if (!s)
-        return null;
-    const n = Number(s);
-    return Number.isInteger(n) && n > 0 ? n : NaN;
-}
-/**
- * Validate and normalise the multipart/form-data body of POST /members/register.
- * All values arrive as strings; this converts them to the exact types/values the
- * tblMembers / tblUsers columns accept and throws a FieldError on the first problem.
- */
-function normalizeRegistrationInput(data) {
-    const fullName = str(data.full_name);
-    if (fullName.length < 2 || fullName.length > 100)
-        throw fieldError('full_name', 'Please enter your full name.');
-    const fatherName = str(data.father_name);
-    if (!fatherName || fatherName.length > 100)
-        throw fieldError('father_name', "Please enter your father's / husband's name.");
-    const dateOfBirth = str(data.date_of_birth);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) || Number.isNaN(new Date(`${dateOfBirth}T00:00:00Z`).getTime())) {
-        throw fieldError('date_of_birth', 'Date of birth must be in YYYY-MM-DD format.');
-    }
-    const dob = new Date(`${dateOfBirth}T00:00:00Z`);
-    const eighteen = new Date(dob);
-    eighteen.setUTCFullYear(dob.getUTCFullYear() + 18);
-    if (eighteen > new Date())
-        throw fieldError('date_of_birth', 'You must be at least 18 years old to join.');
-    const gender = str(data.gender).toUpperCase();
-    if (!GENDERS.includes(gender))
-        throw fieldError('gender', 'Please select a gender.');
-    let countryCode = str(data.country_code) || '+91';
-    if (!countryCode.startsWith('+'))
-        countryCode = `+${countryCode}`;
-    if (!/^\+\d{1,4}$/.test(countryCode))
-        throw fieldError('country_code', 'Invalid country code.');
-    const phoneNumber = str(data.phone_number).replace(/\D/g, '');
-    if (phoneNumber.length < 7 || phoneNumber.length > 15)
-        throw fieldError('phone_number', 'Please enter a valid mobile number.');
-    if (countryCode === '+91' && phoneNumber.length !== 10)
-        throw fieldError('phone_number', 'Please enter a 10-digit mobile number.');
-    const email = str(data.email).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 191)
-        throw fieldError('email', 'Please enter a valid email address.');
-    const password = data.password === undefined || data.password === null ? '' : String(data.password);
-    if (password.length < 8)
-        throw fieldError('password', 'Password must be at least 8 characters.');
-    const bloodGroup = str(data.blood_group) || 'Unknown';
-    if (!BLOOD_GROUPS.includes(bloodGroup))
-        throw fieldError('blood_group', 'Please select a valid blood group.');
-    const aadhaar = str(data.aadhaar_number).replace(/\D/g, '');
-    if (!/^\d{12}$/.test(aadhaar))
-        throw fieldError('aadhaar_number', 'Aadhaar number must be 12 digits.');
-    const voterId = str(data.voter_id).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-    if (voterId.length < 6 || voterId.length > 20 || !/^[A-Z0-9]+$/.test(voterId)) {
-        throw fieldError('voter_id', 'Please enter a valid Voter ID (EPIC) number.');
-    }
-    const stateId = optionalId(data.state_id) ?? 1;
-    if (Number.isNaN(stateId))
-        throw fieldError('state_id', 'Invalid state.');
-    const parliamentId = optionalId(data.parliament_constituency_id);
-    if (!parliamentId)
-        throw fieldError('parliament_constituency_id', 'Please select your parliament constituency.');
-    const assemblyId = optionalId(data.assembly_constituency_id);
-    if (Number.isNaN(assemblyId))
-        throw fieldError('assembly_constituency_id', 'Invalid assembly constituency.');
-    const districtId = optionalId(data.district_id);
-    if (!districtId)
-        throw fieldError('district_id', 'Please select your district.');
-    const blockId = optionalId(data.block_id);
-    if (!blockId)
-        throw fieldError('block_id', 'Please select your taluk / block.');
-    const villageId = optionalId(data.village_id);
-    if (Number.isNaN(villageId))
-        throw fieldError('village_id', 'Invalid village.');
-    const villageCustom = str(data.village_custom).slice(0, 100) || null;
-    const addressLine1 = str(data.address_line1).slice(0, 255) || null;
-    const roleId = optionalId(data.role_id) ?? 1;
-    if (Number.isNaN(roleId))
-        throw fieldError('role_id', 'Invalid membership type.');
-    return {
-        fullName,
-        fatherName,
-        dateOfBirth,
-        gender,
-        countryCode,
-        phoneNumber,
-        email,
-        password,
-        bloodGroup,
-        aadhaar,
-        voterId,
-        stateId,
-        parliamentId,
-        assemblyId,
-        districtId,
-        blockId,
-        villageId,
-        villageCustom,
-        addressLine1,
-        roleId,
-    };
-}
-/** Translate MySQL constraint errors into user-facing field errors. */
-function mapDbError(err) {
-    if (!err || !err.code)
-        return err;
-    if (err.code === 'ER_DUP_ENTRY') {
-        const msg = err.sqlMessage || err.message || '';
-        if (/email/i.test(msg))
-            return fieldError('email', 'This email address is already registered.');
-        if (/phone/i.test(msg))
-            return fieldError('phone_number', 'This phone number is already registered.');
-        if (/aadhaar/i.test(msg))
-            return fieldError('aadhaar_number', 'This Aadhaar number is already registered.');
-        if (/voter/i.test(msg))
-            return fieldError('voter_id', 'This Voter ID is already registered.');
-        return fieldError('phone_number', 'A member with these details is already registered.');
-    }
-    if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_NO_REFERENCED_ROW') {
-        return fieldError('district_id', 'One of the selected location values is invalid. Please re-select and try again.');
-    }
-    return err;
-}
-function maskAadhaar(plain) {
-    const d = (plain || '').replace(/\D/g, '');
-    if (d.length < 4)
+const authService_1 = require("./authService");
+const types_1 = require("../types");
+const constants_1 = require("../constants");
+const DETAIL_JOINS = `
+  LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
+  LEFT JOIN tblAssembly_constituencies ac ON m.assembly_constituency_id = ac.id
+  LEFT JOIN tblDistricts d ON m.district_id = d.id
+  LEFT JOIN tblBlocks b ON m.block_id = b.id
+  LEFT JOIN tblVillages v ON m.village_id = v.id
+  LEFT JOIN tblRoles r ON m.role_id = r.id
+  LEFT JOIN tblMember_qr_codes qr ON qr.member_id = m.id
+`;
+const DETAIL_COLUMNS = `
+  m.id, m.user_id, m.member_id, m.full_name, m.father_name, m.date_of_birth, m.gender,
+  m.country_code, m.phone_number, m.email, m.profile_image, m.blood_group,
+  m.aadhaar_number_encrypted, m.voter_id_encrypted,
+  m.state_id, m.parliament_constituency_id, m.assembly_constituency_id, m.district_id, m.block_id, m.village_id,
+  m.address_line1, m.village_custom, m.role_id, m.status, m.created_at, m.updated_at,
+  pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta, pc.code AS parliament_code,
+  ac.name_en AS assembly_name, ac.name_ta AS assembly_name_ta,
+  d.name_en AS district_name, d.name_ta AS district_name_ta,
+  b.name_en AS block_name, b.name_ta AS block_name_ta,
+  v.name_en AS village_name,
+  r.name AS role_name,
+  qr.verification_token
+`;
+function maskTail(value, visible = 4) {
+    if (!value)
         return '';
-    return `XXXX XXXX ${d.slice(-4)}`;
+    return `${'X'.repeat(Math.max(0, value.length - visible))}${value.slice(-visible)}`;
 }
-function maskVoterId(plain) {
-    const v = (plain || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-    if (v.length < 4)
-        return '';
-    return `${v.slice(0, 2)}${'X'.repeat(Math.max(v.length - 4, 2))}${v.slice(-2)}`;
-}
-/** Strip encrypted / hashed identity columns before sending a member row to a client. */
-function toPublicMember(row, fallback) {
+function toSafeDetail(row) {
     if (!row)
-        return { ...fallback, id_card_token: fallback.verification_token };
-    const { aadhaar_number_encrypted, voter_id_encrypted, aadhaar_hash, voter_id_hash, ...safe } = row;
-    return { ...safe, id_card_token: safe.verification_token || fallback.verification_token };
-}
-async function toLoggedInProfile(row) {
-    const aadhaar = (0, security_1.decryptData)(row.aadhaar_number_encrypted);
-    const voter = (0, security_1.decryptData)(row.voter_id_encrypted);
-    const { aadhaar_number_encrypted, voter_id_encrypted, aadhaar_hash, voter_id_hash, password_hash, ...safe } = row;
-    let qr_data_url = null;
-    if (row.verification_token) {
-        try {
-            qr_data_url = await (0, qrCodeGenerator_1.generateMemberQrDataUrl)(row.verification_token);
-        }
-        catch {
-            qr_data_url = null;
-        }
-    }
+        return null;
+    const { aadhaar_number_encrypted, voter_id_encrypted, ...rest } = row;
     return {
-        ...safe,
-        aadhaar_masked: maskAadhaar(aadhaar),
-        voter_id_masked: maskVoterId(voter),
-        qr_data_url,
+        ...rest,
+        aadhaar_masked: maskTail((0, security_1.decryptData)(aadhaar_number_encrypted)),
+        voter_id_masked: maskTail((0, security_1.decryptData)(voter_id_encrypted)),
     };
+}
+function isValidDate(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(value).getTime());
+}
+function ageInYears(dob) {
+    const birth = new Date(dob);
+    const now = new Date();
+    let age = now.getFullYear() - birth.getFullYear();
+    const m = now.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < birth.getDate()))
+        age--;
+    return age;
+}
+function fieldError(field, message) {
+    return new types_1.HttpError(400, message, 'VALIDATION_ERROR', { field });
 }
 class MemberService {
-    // 1. Check Phone Number Duplicate
+    static async getStaffScope(user) {
+        if (user.roles.includes(constants_1.ROLES.SUPER_ADMIN) || user.roles.includes(constants_1.ROLES.ADMIN))
+            return null;
+        const db = await (0, database_1.getDbConnection)();
+        const [rows] = await db.query('SELECT district_id, block_id, village_id FROM tblMembers WHERE user_id = ?', [user.id]);
+        const own = rows[0];
+        if (!own)
+            return { column: 'm.id', value: -1 };
+        if (user.roles.includes(constants_1.ROLES.DISTRICT_ADMIN))
+            return { column: 'm.district_id', value: own.district_id };
+        if (user.roles.includes(constants_1.ROLES.TALUK_ADMIN))
+            return { column: 'm.block_id', value: own.block_id };
+        if (user.roles.includes(constants_1.ROLES.UNIT_ADMIN)) {
+            return own.village_id ? { column: 'm.village_id', value: own.village_id } : { column: 'm.block_id', value: own.block_id };
+        }
+        return { column: 'm.id', value: -1 };
+    }
     static async checkPhone(countryCode, phone) {
-        const cleanPhone = phone.replace(/\D/g, '');
-        const cleanCode = countryCode.trim() || '+91';
         const db = await (0, database_1.getDbConnection)();
-        if (db) {
-            const [rows] = await db.query(`SELECT id FROM tblMembers WHERE country_code = ? AND phone_number = ?`, [cleanCode, cleanPhone]);
-            return rows.length > 0;
-        }
-        else {
-            return database_1.mockDbStore.members.some(m => m.mobile.includes(cleanPhone));
-        }
+        const cleanPhone = (0, authService_1.normalizePhone)(phone);
+        const [rows] = await db.query('SELECT id FROM tblUsers WHERE phone_number = ? UNION SELECT id FROM tblMembers WHERE country_code = ? AND phone_number = ? LIMIT 1', [cleanPhone, (countryCode || '+91').trim(), cleanPhone]);
+        return rows.length > 0;
     }
-    // 1b. Check Email Duplicate (tblUsers.email is unique)
     static async checkEmail(email) {
-        const clean = email.trim().toLowerCase();
-        if (!clean)
-            return false;
         const db = await (0, database_1.getDbConnection)();
-        if (db) {
-            const [rows] = await db.query(`SELECT id FROM tblUsers WHERE email = ?`, [clean]);
-            return rows.length > 0;
-        }
-        return database_1.mockDbStore.users.some(u => u.email.toLowerCase() === clean);
+        const [rows] = await db.query('SELECT id FROM tblUsers WHERE email = ? LIMIT 1', [String(email).trim().toLowerCase()]);
+        return rows.length > 0;
     }
-    // 2. Check Aadhaar Duplicate
     static async checkAadhaar(aadhaar) {
-        const cleanAadhaar = aadhaar.replace(/\D/g, '');
-        const hash = (0, security_1.hashSensitiveData)(cleanAadhaar);
         const db = await (0, database_1.getDbConnection)();
-        if (db) {
-            const [rows] = await db.query(`SELECT id FROM tblMembers WHERE aadhaar_hash = ?`, [hash]);
-            return rows.length > 0;
-        }
-        return false;
+        const [rows] = await db.query('SELECT id FROM tblMembers WHERE aadhaar_hash = ?', [
+            (0, security_1.hashSensitiveData)(aadhaar.replace(/\s+/g, '')),
+        ]);
+        return rows.length > 0;
     }
-    // 3. Check Voter ID Duplicate
     static async checkVoterId(voterId) {
-        const cleanVoter = voterId.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-        const hash = (0, security_1.hashSensitiveData)(cleanVoter);
         const db = await (0, database_1.getDbConnection)();
-        if (db) {
-            const [rows] = await db.query(`SELECT id FROM tblMembers WHERE voter_id_hash = ?`, [hash]);
-            return rows.length > 0;
-        }
-        return false;
+        const [rows] = await db.query('SELECT id FROM tblMembers WHERE voter_id_hash = ?', [
+            (0, security_1.hashSensitiveData)(voterId.replace(/\s+/g, '').toUpperCase()),
+        ]);
+        return rows.length > 0;
     }
-    // 4. End-to-End Member Registration Transaction
+    static validateRegistration(data) {
+        const required = [
+            ['full_name', 'Full name is required'],
+            ['father_name', "Father's name is required"],
+            ['date_of_birth', 'Date of birth is required'],
+            ['gender', 'Gender is required'],
+            ['phone_number', 'Phone number is required'],
+            ['email', 'Email is required'],
+            ['password', 'Password is required'],
+            ['aadhaar_number', 'Aadhaar number is required'],
+            ['voter_id', 'Voter ID is required'],
+            ['parliament_constituency_id', 'Parliament constituency is required'],
+            ['district_id', 'District is required'],
+            ['block_id', 'Taluk / Block is required'],
+        ];
+        for (const [field, message] of required) {
+            if (data[field] === undefined || data[field] === null || String(data[field]).trim() === '' || String(data[field]) === '0') {
+                throw fieldError(field, message);
+            }
+        }
+        if (!['MALE', 'FEMALE', 'OTHER'].includes(data.gender))
+            throw fieldError('gender', 'Invalid gender');
+        if (!/^\S+@\S+\.\S+$/.test(String(data.email).trim()))
+            throw fieldError('email', 'Invalid email address');
+        if (!/^\d{10}$/.test((0, authService_1.normalizePhone)(data.phone_number)))
+            throw fieldError('phone_number', 'Phone number must be 10 digits');
+        if (String(data.password).length < 8)
+            throw fieldError('password', 'Password must be at least 8 characters');
+        if (!/^\d{12}$/.test(String(data.aadhaar_number).replace(/\s+/g, '')))
+            throw fieldError('aadhaar_number', 'Aadhaar number must be 12 digits');
+        if (String(data.voter_id).replace(/\s+/g, '').length < 6)
+            throw fieldError('voter_id', 'Voter ID must be at least 6 characters');
+        if (!isValidDate(data.date_of_birth))
+            throw fieldError('date_of_birth', 'Invalid date of birth');
+        if (ageInYears(data.date_of_birth) < 18)
+            throw fieldError('date_of_birth', 'Members must be at least 18 years old');
+    }
     static async registerMember(data, profileFile) {
+        try {
+            this.validateRegistration(data);
+            if (!profileFile)
+                throw fieldError('profile_image', 'Profile photo is required.');
+        }
+        catch (err) {
+            if (profileFile)
+                fs_1.default.unlink(profileFile.path, () => { });
+            throw err;
+        }
         const db = await (0, database_1.getDbConnection)();
-        if (!db) {
-            throw new Error('Database connection unavailable.');
+        const countryCode = (data.country_code || '+91').trim();
+        const phoneNumber = (0, authService_1.normalizePhone)(data.phone_number);
+        const email = String(data.email).trim().toLowerCase();
+        const aadhaarClean = String(data.aadhaar_number).replace(/\s+/g, '');
+        const voterIdClean = String(data.voter_id).replace(/\s+/g, '').toUpperCase();
+        const requestedRole = Number(data.role_id) || constants_1.ROLE_IDS.MEMBER;
+        const roleId = constants_1.SELF_SELECTABLE_ROLE_IDS.includes(requestedRole) ? requestedRole : constants_1.ROLE_IDS.MEMBER;
+        const duplicates = [
+            [this.checkPhone(countryCode, phoneNumber), 'phone_number', 'This phone number is already registered.'],
+            [this.checkEmail(email), 'email', 'This email address is already registered.'],
+            [this.checkAadhaar(aadhaarClean), 'aadhaar_number', 'This Aadhaar number is already registered.'],
+            [this.checkVoterId(voterIdClean), 'voter_id', 'This Voter ID is already registered.'],
+        ];
+        for (const [check, field, message] of duplicates) {
+            if (await check) {
+                if (profileFile)
+                    fs_1.default.unlink(profileFile.path, () => { });
+                throw new types_1.HttpError(409, message, 'DUPLICATE_ERROR', { field });
+            }
         }
-        const input = normalizeRegistrationInput(data);
-        // 4a. Duplicate Checks (email is also unique on tblUsers)
-        if (await this.checkPhone(input.countryCode, input.phoneNumber)) {
-            throw fieldError('phone_number', 'This phone number is already registered.');
-        }
-        const [emailRows] = await db.query(`SELECT id FROM tblUsers WHERE email = ?`, [input.email]);
-        if (emailRows.length > 0) {
-            throw fieldError('email', 'This email address is already registered.');
-        }
-        if (await this.checkAadhaar(input.aadhaar)) {
-            throw fieldError('aadhaar_number', 'This Aadhaar number is already registered.');
-        }
-        if (await this.checkVoterId(input.voterId)) {
-            throw fieldError('voter_id', 'This Voter ID is already registered.');
-        }
-        // 4b. Location lookups: make sure the chosen IDs exist and belong together
-        const [parlRows] = await db.query(`SELECT id, code FROM tblParliament_constituencies WHERE id = ? AND status = 'ACTIVE'`, [input.parliamentId]);
-        if (parlRows.length === 0) {
-            throw fieldError('parliament_constituency_id', 'Please select a valid parliament constituency.');
-        }
+        const [parlRows] = await db.query('SELECT code FROM tblParliament_constituencies WHERE id = ?', [data.parliament_constituency_id]);
+        if (parlRows.length === 0)
+            throw fieldError('parliament_constituency_id', 'Invalid parliament constituency');
         const parliamentCode = parlRows[0].code || 'TN';
-        if (input.assemblyId) {
-            const [asmRows] = await db.query(`SELECT id FROM tblAssembly_constituencies WHERE id = ? AND status = 'ACTIVE'`, [input.assemblyId]);
-            if (asmRows.length === 0) {
-                throw fieldError('assembly_constituency_id', 'Please select a valid assembly constituency.');
-            }
-        }
-        const [distRows] = await db.query(`SELECT id FROM tblDistricts WHERE id = ? AND status = 'ACTIVE'`, [input.districtId]);
-        if (distRows.length === 0) {
-            throw fieldError('district_id', 'Please select a valid district.');
-        }
-        const [blockRows] = await db.query(`SELECT id FROM tblBlocks WHERE id = ? AND district_id = ? AND status = 'ACTIVE'`, [input.blockId, input.districtId]);
-        if (blockRows.length === 0) {
-            throw fieldError('block_id', 'Please select a valid taluk / block for the chosen district.');
-        }
-        if (input.villageId) {
-            const [villRows] = await db.query(`SELECT id FROM tblVillages WHERE id = ? AND block_id = ? AND status = 'ACTIVE'`, [input.villageId, input.blockId]);
-            if (villRows.length === 0) {
-                throw fieldError('village_id', 'Please select a valid village for the chosen block.');
-            }
-        }
-        const [roleRows] = await db.query(`SELECT id, name FROM tblRoles WHERE id = ?`, [input.roleId]);
-        if (roleRows.length === 0 || /admin/i.test(roleRows[0].name)) {
-            throw fieldError('role_id', 'Please select a valid membership type.');
-        }
-        // 4c. Profile Photo Path
+        const passwordHash = await bcryptjs_1.default.hash(String(data.password), 10);
         const profileImagePath = profileFile ? `/uploads/profiles/${profileFile.filename}` : null;
-        // 4d. Password Hashing & Security Encryptions
-        const passwordHash = await bcryptjs_1.default.hash(input.password, 10);
-        const aadhaarHash = (0, security_1.hashSensitiveData)(input.aadhaar);
-        const voterIdHash = (0, security_1.hashSensitiveData)(input.voterId);
-        const aadhaarEncrypted = (0, security_1.encryptData)(input.aadhaar);
-        const voterIdEncrypted = (0, security_1.encryptData)(input.voterId);
-        // 4e. MySQL Transaction: user -> role -> member -> QR token
         const conn = await db.getConnection();
         try {
             await conn.beginTransaction();
-            const [userResult] = await conn.query(`INSERT INTO tblUsers (email, country_code, phone_number, password_hash, status) VALUES (?, ?, ?, ?, 'ACTIVE')`, [input.email, input.countryCode, input.phoneNumber, passwordHash]);
+            const [userResult] = await conn.query(`INSERT INTO tblUsers (email, country_code, phone_number, password_hash, status) VALUES (?, ?, ?, ?, 'ACTIVE')`, [email, countryCode, phoneNumber, passwordHash]);
             const userId = userResult.insertId;
-            await conn.query(`INSERT INTO tblUser_roles (user_id, role_id) VALUES (?, ?)`, [userId, input.roleId]);
-            const memberIdCode = (0, generateMemberId_1.generateMemberId)(userId, parliamentCode);
+            // System access is always "Member"; coordinator/admin access is granted by an administrator.
+            await conn.query('INSERT INTO tblUser_roles (user_id, role_id) VALUES (?, ?)', [userId, constants_1.ROLE_IDS.MEMBER]);
+            const pendingMemberId = `TMP-${userId}-${Date.now()}`;
             const [memberResult] = await conn.query(`INSERT INTO tblMembers (
           user_id, member_id, full_name, father_name, date_of_birth, gender,
           country_code, phone_number, email, profile_image, blood_group,
@@ -306,228 +201,206 @@ class MemberService {
           district_id, block_id, village_id, address_line1, village_custom, role_id, status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED')`, [
                 userId,
-                memberIdCode,
-                input.fullName,
-                input.fatherName,
-                input.dateOfBirth,
-                input.gender,
-                input.countryCode,
-                input.phoneNumber,
-                input.email,
+                pendingMemberId,
+                String(data.full_name).trim(),
+                String(data.father_name).trim(),
+                data.date_of_birth,
+                data.gender,
+                countryCode,
+                phoneNumber,
+                email,
                 profileImagePath,
-                input.bloodGroup,
-                aadhaarEncrypted,
-                voterIdEncrypted,
-                aadhaarHash,
-                voterIdHash,
-                input.stateId,
-                input.parliamentId,
-                input.assemblyId,
-                input.districtId,
-                input.blockId,
-                input.villageId,
-                input.addressLine1,
-                input.villageCustom,
-                input.roleId
+                data.blood_group || 'Unknown',
+                (0, security_1.encryptData)(aadhaarClean),
+                (0, security_1.encryptData)(voterIdClean),
+                (0, security_1.hashSensitiveData)(aadhaarClean),
+                (0, security_1.hashSensitiveData)(voterIdClean),
+                Number(data.state_id) || 1,
+                Number(data.parliament_constituency_id),
+                Number(data.assembly_constituency_id) || null,
+                Number(data.district_id),
+                Number(data.block_id),
+                Number(data.village_id) || null,
+                data.address_line1 || null,
+                data.village_custom || null,
+                roleId,
             ]);
             const memberDbId = memberResult.insertId;
+            const memberIdCode = (0, generateMemberId_1.generateMemberId)(memberDbId, parliamentCode);
+            await conn.query('UPDATE tblMembers SET member_id = ? WHERE id = ?', [memberIdCode, memberDbId]);
             const verificationToken = `TOKEN-${crypto_1.default.randomBytes(16).toString('hex').toUpperCase()}`;
-            await conn.query(`INSERT INTO tblMember_qr_codes (member_id, verification_token) VALUES (?, ?)`, [memberDbId, verificationToken]);
+            await conn.query('INSERT INTO tblMember_qr_codes (member_id, verification_token) VALUES (?, ?)', [memberDbId, verificationToken]);
             await conn.commit();
-            conn.release();
-            // Return the full, joined member record so the client can render the ID card immediately
-            const created = await this.getMemberForIdCard(memberDbId);
-            return toPublicMember(created, {
-                id: memberDbId,
-                user_id: userId,
-                member_id: memberIdCode,
-                full_name: input.fullName,
-                country_code: input.countryCode,
-                phone_number: input.phoneNumber,
-                email: input.email,
-                verification_token: verificationToken,
-                status: 'APPROVED',
-            });
+            const detail = await this.getMemberById(memberDbId, null);
+            return { ...detail, verification_token: verificationToken };
         }
         catch (err) {
             await conn.rollback();
+            if (profileFile)
+                fs_1.default.unlink(profileFile.path, () => { });
+            throw err;
+        }
+        finally {
             conn.release();
-            throw mapDbError(err);
         }
     }
-    // 4f. Lookup a member by their QR verification token (used for the post-registration ID card download)
-    static async getMemberByVerificationToken(token) {
-        const db = await (0, database_1.getDbConnection)();
-        if (!db)
-            return null;
-        const [rows] = await db.query(`SELECT m.id FROM tblMember_qr_codes qr JOIN tblMembers m ON qr.member_id = m.id WHERE qr.verification_token = ?`, [token]);
-        if (rows.length === 0)
-            return null;
-        return this.getMemberForIdCard(rows[0].id);
-    }
-    // 5. Public Member QR Verification Service
     static async verifyMemberByToken(token) {
         const db = await (0, database_1.getDbConnection)();
-        if (db) {
-            const [rows] = await db.query(`SELECT 
-          m.id, m.member_id, m.full_name, m.gender, m.profile_image, m.blood_group, m.status, m.created_at,
-          pc.name_en as parliament_name, pc.name_ta as parliament_name_ta,
-          ac.name_en as assembly_name, ac.name_ta as assembly_name_ta,
-          d.name_en as district_name, d.name_ta as district_name_ta,
-          b.name_en as block_name, b.name_ta as block_name_ta,
-          v.name_en as village_name, r.name as role_name
-        FROM tblMember_qr_codes qr
-        JOIN tblMembers m ON qr.member_id = m.id
-        LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
-        LEFT JOIN tblAssembly_constituencies ac ON m.assembly_constituency_id = ac.id
-        LEFT JOIN tblDistricts d ON m.district_id = d.id
-        LEFT JOIN tblBlocks b ON m.block_id = b.id
-        LEFT JOIN tblVillages v ON m.village_id = v.id
-        LEFT JOIN tblRoles r ON m.role_id = r.id
-        WHERE qr.verification_token = ?`, [token]);
-            if (rows.length === 0)
-                return null;
-            return rows[0];
-        }
-        return null;
+        const [rows] = await db.query(`SELECT
+        m.member_id, m.full_name, m.father_name, m.date_of_birth, m.gender,
+        m.country_code, m.phone_number, m.email, m.profile_image, m.blood_group,
+        m.address_line1, m.village_custom, m.status, m.created_at,
+        pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta, pc.code AS parliament_code,
+        ac.name_en AS assembly_name, ac.name_ta AS assembly_name_ta,
+        d.name_en AS district_name, d.name_ta AS district_name_ta,
+        b.name_en AS block_name, b.name_ta AS block_name_ta,
+        v.name_en AS village_name, r.name AS role_name
+      FROM tblMember_qr_codes qr
+      JOIN tblMembers m ON qr.member_id = m.id
+      LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
+      LEFT JOIN tblAssembly_constituencies ac ON m.assembly_constituency_id = ac.id
+      LEFT JOIN tblDistricts d ON m.district_id = d.id
+      LEFT JOIN tblBlocks b ON m.block_id = b.id
+      LEFT JOIN tblVillages v ON m.village_id = v.id
+      LEFT JOIN tblRoles r ON m.role_id = r.id
+      WHERE qr.verification_token = ?`, [token]);
+        return rows[0] || null;
     }
-    // 6. Get Member Details for PDF ID Card Generation
-    static async getMemberForIdCard(memberIdOrDbId) {
+    static async getMembers(filters, scope, paginate = true) {
         const db = await (0, database_1.getDbConnection)();
-        if (db) {
-            // Numeric input = tblMembers.id, otherwise the public member code (e.g. 001CNC00007).
-            // Never compare the varchar member_id against a number: MySQL would coerce '001CNC00007' to 1.
-            const byDbId = typeof memberIdOrDbId === 'number' || /^\d+$/.test(String(memberIdOrDbId));
-            const where = byDbId ? 'm.id = ?' : 'm.member_id = ?';
-            const param = byDbId ? Number(memberIdOrDbId) : String(memberIdOrDbId).trim().toUpperCase();
-            const [rows] = await db.query(`SELECT 
-          m.*, qr.verification_token,
-          pc.name_en as parliament_name, pc.name_ta as parliament_name_ta, pc.code as parliament_code,
-          ac.name_en as assembly_name, ac.name_ta as assembly_name_ta,
-          d.name_en as district_name, d.name_ta as district_name_ta,
-          b.name_en as block_name, b.name_ta as block_name_ta,
-          v.name_en as village_name, v.name_ta as village_name_ta,
-          r.name as role_name
-        FROM tblMembers m
-        LEFT JOIN tblMember_qr_codes qr ON m.id = qr.member_id
-        LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
-        LEFT JOIN tblAssembly_constituencies ac ON m.assembly_constituency_id = ac.id
-        LEFT JOIN tblDistricts d ON m.district_id = d.id
-        LEFT JOIN tblBlocks b ON m.block_id = b.id
-        LEFT JOIN tblVillages v ON m.village_id = v.id
-        LEFT JOIN tblRoles r ON m.role_id = r.id
-        WHERE ${where}`, [param]);
-            if (rows.length === 0)
-                return null;
-            return rows[0];
-        }
-        return null;
-    }
-    // Standard List & Filter Members (Admin Panel)
-    static async getMembers(filters = {}) {
-        const page = Math.max(1, parseInt(String(filters.page || 1), 10) || 1);
-        const pageSize = Math.min(100, Math.max(1, parseInt(String(filters.pageSize || 20), 10) || 20));
-        const offset = (page - 1) * pageSize;
-        const db = await (0, database_1.getDbConnection)();
-        if (!db) {
-            let list = [...database_1.mockDbStore.members];
-            if (filters.status)
-                list = list.filter((m) => m.status === filters.status);
-            if (filters.search) {
-                const term = String(filters.search).toLowerCase();
-                list = list.filter((m) => [m.full_name, m.member_id, m.phone_number, m.email].some((v) => String(v || '').toLowerCase().includes(term)));
-            }
-            const total = list.length;
-            return { items: list.slice(offset, offset + pageSize), total, page, pageSize };
-        }
-        let where = ' WHERE 1=1';
+        let where = 'WHERE 1=1';
         const params = [];
-        if (filters.status) {
+        if (scope) {
+            where += ` AND ${scope.column} = ?`;
+            params.push(scope.value);
+        }
+        if (filters.status && constants_1.MEMBER_STATUSES.includes(String(filters.status))) {
             where += ' AND m.status = ?';
             params.push(filters.status);
         }
-        if (filters.parliament_id) {
-            where += ' AND m.parliament_constituency_id = ?';
-            params.push(filters.parliament_id);
-        }
-        if (filters.district_id) {
-            where += ' AND m.district_id = ?';
-            params.push(filters.district_id);
-        }
-        if (filters.block_id) {
-            where += ' AND m.block_id = ?';
-            params.push(filters.block_id);
-        }
-        if (filters.role_id) {
-            where += ' AND m.role_id = ?';
-            params.push(filters.role_id);
+        for (const [key, column] of [
+            ['parliament_id', 'm.parliament_constituency_id'],
+            ['district_id', 'm.district_id'],
+            ['block_id', 'm.block_id'],
+            ['role_id', 'm.role_id'],
+        ]) {
+            if (filters[key]) {
+                where += ` AND ${column} = ?`;
+                params.push(Number(filters[key]));
+            }
         }
         if (filters.search) {
             where += ' AND (m.full_name LIKE ? OR m.member_id LIKE ? OR m.phone_number LIKE ? OR m.email LIKE ?)';
-            const term = `%${filters.search}%`;
+            const term = `%${String(filters.search).trim()}%`;
             params.push(term, term, term, term);
         }
-        const from = `
+        const baseQuery = `
       FROM tblMembers m
       LEFT JOIN tblDistricts d ON m.district_id = d.id
       LEFT JOIN tblBlocks b ON m.block_id = b.id
       LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
       LEFT JOIN tblRoles r ON m.role_id = r.id
-      ${where}
-    `;
-        const [countRows] = await db.query(`SELECT COUNT(*) as count ${from}`, params);
-        const total = Number(countRows[0]?.count) || 0;
-        const [rows] = await db.query(`SELECT m.id, m.user_id, m.member_id, m.full_name, m.email, m.country_code, m.phone_number, m.profile_image,
-              m.blood_group, m.status, m.created_at, m.role_id,
-              d.name_en as district_name, d.name_ta as district_name_ta,
-              b.name_en as block_name, b.name_ta as block_name_ta,
-              pc.name_en as parliament_name, pc.name_ta as parliament_name_ta, pc.code as parliament_code,
-              r.name as role_name
-       ${from}
-       ORDER BY m.id DESC
-       LIMIT ? OFFSET ?`, [...params, pageSize, offset]);
-        return { items: rows, total, page, pageSize };
-    }
-    static async getMemberById(id) {
-        if (!Number.isInteger(id) || id <= 0)
-            return null;
-        const db = await (0, database_1.getDbConnection)();
-        if (db) {
-            const [rows] = await db.query(`SELECT m.*, d.name_en as district_name, b.name_en as block_name, pc.name_en as parliament_name, r.name as role_name
-         FROM tblMembers m
-         LEFT JOIN tblDistricts d ON m.district_id = d.id
-         LEFT JOIN tblBlocks b ON m.block_id = b.id
-         LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
-         LEFT JOIN tblRoles r ON m.role_id = r.id
-         WHERE m.id = ? OR m.user_id = ?`, [id, id]);
-            return rows[0] || null;
+      ${where}`;
+        const columns = `
+      m.id, m.member_id, m.full_name, m.email, m.country_code, m.phone_number, m.blood_group, m.gender,
+      m.profile_image, m.status, m.role_id, m.created_at,
+      d.name_en AS district_name, d.name_ta AS district_name_ta,
+      b.name_en AS block_name, b.name_ta AS block_name_ta,
+      pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta, pc.code AS parliament_code,
+      r.name AS role_name`;
+        if (!paginate) {
+            const [rows] = await db.query(`SELECT ${columns} ${baseQuery} ORDER BY m.id DESC`, params);
+            return { items: rows, total: rows.length, page: 1, pageSize: rows.length };
         }
-        return database_1.mockDbStore.members.find(m => m.id === id);
+        const pageSize = Math.min(Math.max(Number(filters.pageSize) || 20, 1), 100);
+        const page = Math.max(Number(filters.page) || 1, 1);
+        const [[countRow]] = await db.query(`SELECT COUNT(*) AS total ${baseQuery}`, params);
+        const [rows] = await db.query(`SELECT ${columns} ${baseQuery} ORDER BY m.id DESC LIMIT ? OFFSET ?`, [
+            ...params,
+            pageSize,
+            (page - 1) * pageSize,
+        ]);
+        return { items: rows, total: Number(countRow.total), page, pageSize };
     }
-    /** Logged-in member portal payload: joined names, masked IDs, QR — never the encrypted columns. */
-    static async getMyProfile(userId) {
-        if (!Number.isInteger(userId) || userId <= 0)
-            return null;
+    static async getMemberById(id, scope) {
         const db = await (0, database_1.getDbConnection)();
-        if (!db)
-            return null;
-        const [idRows] = await db.query('SELECT id FROM tblMembers WHERE user_id = ?', [userId]);
-        if (idRows.length === 0)
-            return null;
-        const row = await this.getMemberForIdCard(idRows[0].id);
-        if (!row)
-            return null;
-        return toLoggedInProfile(row);
-    }
-    static async getMemberQr(memberDbId) {
-        const db = await (0, database_1.getDbConnection)();
-        if (db) {
-            const [rows] = await db.query('SELECT * FROM tblMember_qr_codes WHERE member_id = ?', [memberDbId]);
-            if (rows.length === 0)
-                return null;
-            return rows[0];
+        let query = `SELECT ${DETAIL_COLUMNS} FROM tblMembers m ${DETAIL_JOINS} WHERE m.id = ?`;
+        const params = [id];
+        if (scope) {
+            query += ` AND ${scope.column} = ?`;
+            params.push(scope.value);
         }
-        return null;
+        const [rows] = await db.query(query, params);
+        return toSafeDetail(rows[0]);
+    }
+    static async getProfileByUserId(userId) {
+        const db = await (0, database_1.getDbConnection)();
+        const [rows] = await db.query(`SELECT ${DETAIL_COLUMNS} FROM tblMembers m ${DETAIL_JOINS} WHERE m.user_id = ?`, [userId]);
+        const detail = toSafeDetail(rows[0]);
+        if (!detail)
+            return null;
+        const qr_data_url = detail.verification_token ? await (0, qrCodeGenerator_1.generateMemberQrDataUrl)(detail.verification_token) : null;
+        return { ...detail, qr_data_url };
+    }
+    static async updateStatus(id, status, scope) {
+        if (!constants_1.MEMBER_STATUSES.includes(status))
+            throw fieldError('status', 'Invalid member status');
+        const member = await this.getMemberById(id, scope);
+        if (!member)
+            throw new types_1.HttpError(404, 'Member not found', 'NOT_FOUND');
+        const db = await (0, database_1.getDbConnection)();
+        await db.query('UPDATE tblMembers SET status = ? WHERE id = ?', [status, id]);
+        await db.query('UPDATE tblUsers SET status = ? WHERE id = ?', [status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE', member.user_id]);
+        return this.getMemberById(id, scope);
+    }
+    static async updateRole(id, roleId, actor) {
+        const db = await (0, database_1.getDbConnection)();
+        const [roles] = await db.query('SELECT id, name FROM tblRoles WHERE id = ?', [roleId]);
+        if (roles.length === 0)
+            throw fieldError('role_id', 'Invalid role');
+        if (['Admin', 'Super Admin'].includes(roles[0].name) && !actor.roles.includes(constants_1.ROLES.SUPER_ADMIN)) {
+            throw new types_1.HttpError(403, 'Only a Super Admin can grant administrator roles', 'FORBIDDEN');
+        }
+        const member = await this.getMemberById(id, null);
+        if (!member)
+            throw new types_1.HttpError(404, 'Member not found', 'NOT_FOUND');
+        if (member.user_id === actor.id)
+            throw new types_1.HttpError(400, 'You cannot change your own role', 'VALIDATION_ERROR');
+        const conn = await db.getConnection();
+        try {
+            await conn.beginTransaction();
+            await conn.query('UPDATE tblMembers SET role_id = ? WHERE id = ?', [roleId, id]);
+            await conn.query('DELETE FROM tblUser_roles WHERE user_id = ?', [member.user_id]);
+            await conn.query('INSERT INTO tblUser_roles (user_id, role_id) VALUES (?, ?)', [member.user_id, roleId]);
+            await conn.commit();
+        }
+        catch (err) {
+            await conn.rollback();
+            throw err;
+        }
+        finally {
+            conn.release();
+        }
+        return this.getMemberById(id, null);
+    }
+    static async getMemberForIdCard(where, scope = null) {
+        const db = await (0, database_1.getDbConnection)();
+        let query = `SELECT ${DETAIL_COLUMNS} FROM tblMembers m ${DETAIL_JOINS} WHERE `;
+        const params = [];
+        if (where.userId) {
+            query += 'm.user_id = ?';
+            params.push(where.userId);
+        }
+        else {
+            query += 'm.id = ?';
+            params.push(where.id);
+        }
+        if (scope) {
+            query += ` AND ${scope.column} = ?`;
+            params.push(scope.value);
+        }
+        const [rows] = await db.query(query, params);
+        return toSafeDetail(rows[0]);
     }
 }
 exports.MemberService = MemberService;
