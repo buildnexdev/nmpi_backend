@@ -249,7 +249,8 @@ export class MemberService {
       await conn.commit();
 
       const detail = await this.getMemberById(memberDbId, null);
-      return { ...detail, verification_token: verificationToken };
+      const qr_data_url = await generateMemberQrDataUrl(verificationToken);
+      return { ...detail, verification_token: verificationToken, qr_data_url };
     } catch (err) {
       await conn.rollback();
       if (profileFile) fs.unlink(profileFile.path, () => {});
