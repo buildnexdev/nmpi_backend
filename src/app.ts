@@ -40,7 +40,12 @@ app.get('/uploads/:folder/:filename', serveUpload);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'UP', service: 'NMPI Platform API', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'UP',
+    service: 'NMPI Platform API',
+    build: 's3-2',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.use('/api/auth', authRoutes);

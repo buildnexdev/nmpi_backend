@@ -5,10 +5,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.uploadMediaVideo = exports.uploadMediaImage = exports.uploadProfileImage = exports.DEFAULT_MEDIA_FOLDER = exports.MEDIA_FOLDERS = exports.VIDEO_MEDIA_FOLDER = exports.ALLOWED_VIDEO_EXTENSIONS = exports.ALLOWED_IMAGE_EXTENSIONS = exports.PROFILE_UPLOAD_DIR = exports.UPLOADS_ROOT = void 0;
 exports.resolveMediaFolder = resolveMediaFolder;
+exports.nextMediaFileName = nextMediaFileName;
+exports.nextProfileFileName = nextProfileFileName;
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
-exports.UPLOADS_ROOT = path_1.default.join(process.cwd(), 'uploads');
+const fromEnv = (process.env.UPLOAD_DIR || '').trim();
+exports.UPLOADS_ROOT = fromEnv
+    ? path_1.default.resolve(fromEnv)
+    : path_1.default.resolve(__dirname, '../../uploads');
 exports.PROFILE_UPLOAD_DIR = path_1.default.join(exports.UPLOADS_ROOT, 'profiles');
 exports.ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 exports.ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov'];
@@ -49,53 +54,36 @@ const videoFileFilter = (req, file, cb) => {
         cb(err);
     }
 };
-function diskStorage(dir, prefix) {
-    return multer_1.default.diskStorage({
-        destination: (req, file, cb) => cb(null, dir),
-        filename: (req, file, cb) => {
-            const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-            cb(null, `${prefix}_${uniqueSuffix}${path_1.default.extname(file.originalname).toLowerCase()}`);
-        },
-    });
-}
+const memory = multer_1.default.memoryStorage();
 /** IMG- / VID- YYYYMMDD-NNNNNN.ext, matching existing upload naming. */
-function mediaFileName(dir, ext, prefix = 'IMG') {
+function safeExt(originalName) {
+    const ext = path_1.default.extname(String(originalName || '')).toLowerCase();
+    return ext && ext.length <= 8 ? ext : '.jpg';
+}
+function nextMediaFileName(folder, originalName) {
+    const ext = safeExt(originalName);
+    const prefix = folder === exports.VIDEO_MEDIA_FOLDER ? 'VID' : 'IMG';
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-    for (;;) {
-        const name = `${prefix}-${stamp}-${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}${ext}`;
-        if (!fs_1.default.existsSync(path_1.default.join(dir, name)))
-            return name;
-    }
+    return `${prefix}-${stamp}-${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}${ext}`;
+}
+function nextProfileFileName(originalName) {
+    return `profile_${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt(originalName)}`;
 }
 exports.uploadProfileImage = (0, multer_1.default)({
-    storage: diskStorage(exports.PROFILE_UPLOAD_DIR, 'profile'),
+    storage: memory,
     fileFilter: imageFileFilter,
     limits: { fileSize: 5 * 1024 * 1024 },
 });
-const mediaStorage = multer_1.default.diskStorage({
-    destination: (req, file, cb) => {
-        const folder = resolveMediaFolder(req.query.folder) ?? exports.DEFAULT_MEDIA_FOLDER;
-        req.mediaFolder = folder;
-        cb(null, path_1.default.join(exports.UPLOADS_ROOT, folder));
-    },
-    filename: (req, file, cb) => {
-        const folder = req.mediaFolder ?? exports.DEFAULT_MEDIA_FOLDER;
-        const dir = path_1.default.join(exports.UPLOADS_ROOT, folder);
-        const ext = path_1.default.extname(file.originalname).toLowerCase();
-        const prefix = folder === exports.VIDEO_MEDIA_FOLDER ? 'VID' : 'IMG';
-        cb(null, mediaFileName(dir, ext, prefix));
-    },
-});
-/** Saves images into uploads/<folder>/ (Gallery, Events, News, Leaders). */
+/** Accepts images for uploads/<folder>/ (Gallery, Events, News, Leaders). */
 exports.uploadMediaImage = (0, multer_1.default)({
-    storage: mediaStorage,
+    storage: memory,
     fileFilter: imageFileFilter,
     limits: { fileSize: 5 * 1024 * 1024 },
 });
-/** Saves videos into uploads/Videos/. */
+/** Accepts videos for uploads/Videos/. */
 exports.uploadMediaVideo = (0, multer_1.default)({
-    storage: mediaStorage,
+    storage: memory,
     fileFilter: videoFileFilter,
     limits: { fileSize: 80 * 1024 * 1024 },
 });

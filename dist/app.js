@@ -20,6 +20,7 @@ const cmsRoutes_1 = __importDefault(require("./routes/cmsRoutes"));
 const accessRoutes_1 = __importDefault(require("./routes/accessRoutes"));
 const uploadRoutes_1 = __importDefault(require("./routes/uploadRoutes"));
 const errorHandler_1 = require("./middleware/errorHandler");
+const uploadsServe_1 = require("./middleware/uploadsServe");
 const app = (0, express_1.default)();
 app.use((0, helmet_1.default)({ crossOriginResourcePolicy: false }));
 app.use((0, cors_1.default)({ origin: '*', exposedHeaders: ['Content-Disposition'] }));
@@ -31,9 +32,15 @@ app.use('/api/', (0, express_rate_limit_1.default)({
     max: 1000,
     message: { success: false, message: 'Too many requests, please try again later.', data: null },
 }));
+app.get('/uploads/:folder/:filename', uploadsServe_1.serveUpload);
 app.use('/uploads', express_1.default.static(path_1.default.join(process.cwd(), 'uploads')));
 app.get('/health', (req, res) => {
-    res.json({ status: 'UP', service: 'NMPI Platform API', timestamp: new Date().toISOString() });
+    res.json({
+        status: 'UP',
+        service: 'NMPI Platform API',
+        build: 's3-2',
+        timestamp: new Date().toISOString(),
+    });
 });
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/members', memberRoutes_1.default);

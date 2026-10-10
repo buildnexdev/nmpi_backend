@@ -258,10 +258,16 @@ export class MemberService {
       const detail = await this.getMemberById(memberDbId, null);
       const qr_data_url = await generateMemberQrDataUrl(verificationToken);
       return { ...detail, verification_token: verificationToken, qr_data_url };
-    } catch (err) {
+    } catch (err: any) {
       await conn.rollback();
       await removeStoredUpload(profileImagePath);
-      throw err;
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(
+        500,
+        err?.sqlMessage || err?.message || 'Registration failed',
+        'INTERNAL_ERROR',
+        { code: err?.code || err?.name || null },
+      );
     } finally {
       conn.release();
     }

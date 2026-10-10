@@ -6,11 +6,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MemberService = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const crypto_1 = __importDefault(require("crypto"));
-const fs_1 = __importDefault(require("fs"));
 const database_1 = require("../config/database");
 const generateMemberId_1 = require("../functions/generateMemberId");
 const security_1 = require("../utils/security");
 const qrCodeGenerator_1 = require("../utils/qrCodeGenerator");
+const uploadMiddleware_1 = require("../middleware/uploadMiddleware");
+const uploadStorage_1 = require("../utils/uploadStorage");
 const authService_1 = require("./authService");
 const types_1 = require("../types");
 const constants_1 = require("../constants");
@@ -148,16 +149,9 @@ class MemberService {
             throw fieldError('date_of_birth', 'Members must be at least 18 years old');
     }
     static async registerMember(data, profileFile) {
-        try {
-            this.validateRegistration(data);
-            if (!profileFile)
-                throw fieldError('profile_image', 'Profile photo is required.');
-        }
-        catch (err) {
-            if (profileFile)
-                fs_1.default.unlink(profileFile.path, () => { });
-            throw err;
-        }
+        this.validateRegistration(data);
+        if (!profileFile)
+            throw fieldError('profile_image', 'Profile photo is required.');
         const db = await (0, database_1.getDbConnection)();
         const countryCode = (data.country_code || '+91').trim();
         const phoneNumber = (0, authService_1.normalizePhone)(data.phone_number);
@@ -174,8 +168,6 @@ class MemberService {
         ];
         for (const [check, field, message] of duplicates) {
             if (await check) {
-                if (profileFile)
-                    fs_1.default.unlink(profileFile.path, () => { });
                 throw new types_1.HttpError(409, message, 'DUPLICATE_ERROR', { field });
             }
         }
@@ -184,7 +176,16 @@ class MemberService {
             throw fieldError('parliament_constituency_id', 'Invalid parliament constituency');
         const parliamentCode = parlRows[0].code || 'TN';
         const passwordHash = await bcryptjs_1.default.hash(String(data.password), 10);
-        const profileImagePath = profileFile ? `/uploads/profiles/${profileFile.filename}` : null;
+        const profileFilename = (0, uploadMiddleware_1.nextProfileFileName)(profileFile.originalname);
+        let profileImagePath = '';
+        try {
+            profileImagePath = await (0, uploadStorage_1.storeUpload)('profiles', profileFilename, (0, uploadStorage_1.fileBuffer)(profileFile), profileFile.mimetype || 'image/jpeg');
+        }
+        catch (err) {
+            if (err instanceof types_1.HttpError)
+                throw err;
+            throw new types_1.HttpError(503, err?.message || 'Could not save the profile photo.', 'UPLOAD_ERROR');
+        }
         const conn = await db.getConnection();
         try {
             await conn.beginTransaction();
@@ -232,13 +233,15 @@ class MemberService {
             await conn.query('INSERT INTO tblMember_qr_codes (member_id, verification_token) VALUES (?, ?)', [memberDbId, verificationToken]);
             await conn.commit();
             const detail = await this.getMemberById(memberDbId, null);
-            return { ...detail, verification_token: verificationToken };
+            const qr_data_url = await (0, qrCodeGenerator_1.generateMemberQrDataUrl)(verificationToken);
+            return { ...detail, verification_token: verificationToken, qr_data_url };
         }
         catch (err) {
             await conn.rollback();
-            if (profileFile)
-                fs_1.default.unlink(profileFile.path, () => { });
-            throw err;
+            await (0, uploadStorage_1.removeStoredUpload)(profileImagePath);
+            if (err instanceof types_1.HttpError)
+                throw err;
+            throw new types_1.HttpError(500, err?.sqlMessage || err?.message || 'Registration failed', 'INTERNAL_ERROR', { code: err?.code || err?.name || null });
         }
         finally {
             conn.release();

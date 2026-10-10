@@ -6,13 +6,20 @@ const uploadMiddleware_1 = require("../middleware/uploadMiddleware");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const rbacMiddleware_1 = require("../middleware/rbacMiddleware");
 const constants_1 = require("../constants");
+const response_1 = require("../utils/response");
 const router = (0, express_1.Router)();
 // Public registration & duplicate checks
 router.get('/check-phone', memberController_1.checkPhone);
 router.get('/check-email', memberController_1.checkEmail);
 router.get('/check-aadhaar', memberController_1.checkAadhaar);
 router.get('/check-voter-id', memberController_1.checkVoterId);
-router.post('/register', uploadMiddleware_1.uploadProfileImage.single('profile_image'), memberController_1.registerMember);
+router.post('/register', (req, res, next) => {
+    uploadMiddleware_1.uploadProfileImage.single('profile_image')(req, res, (err) => {
+        if (err)
+            return (0, response_1.sendError)(res, err.message || 'Profile photo upload failed', 'VALIDATION_ERROR', 400);
+        next();
+    });
+}, memberController_1.registerMember);
 router.get('/id-card/download', memberController_1.downloadIdCardWithToken);
 // Logged-in member
 router.get('/me', authMiddleware_1.authenticateJWT, memberController_1.getMyProfile);
