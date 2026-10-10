@@ -6,9 +6,12 @@ import {
   ALLOWED_VIDEO_EXTENSIONS,
   DEFAULT_MEDIA_FOLDER,
   MEDIA_FOLDERS,
+  nextMediaFileName,
   resolveMediaFolder,
   VIDEO_MEDIA_FOLDER,
 } from '../middleware/uploadMiddleware';
+import { isS3Enabled, listS3Folder, s3ObjectExists } from '../services/s3Service';
+import { fileBuffer, removeUpload, storeUpload } from '../utils/uploadStorage';
 
 const UPLOAD_ROOT = path.join(process.cwd(), 'uploads');
 const LEGACY_MEDIA_DIR = path.join(UPLOAD_ROOT, 'media');
@@ -30,12 +33,22 @@ type UploadItem = {
 
 const VIDEO_EXT = new Set([...ALLOWED_VIDEO_EXTENSIONS]);
 
+function kindOf(name: string): 'image' | 'video' {
+  return VIDEO_EXT.has(path.extname(name).toLowerCase()) ? 'video' : 'image';
+}
+
 function fileInfo(abs: string, rel: string, folder: string): UploadItem {
   const stat = fs.statSync(abs);
   const url = `/${rel.replace(/\\/g, '/')}`;
-  const ext = path.extname(abs).toLowerCase();
-  const kind = VIDEO_EXT.has(ext) ? 'video' : 'image';
-  return { filename: path.basename(abs), folder, path: url, url, size: stat.size, updated_at: stat.mtime.toISOString(), kind };
+  return {
+    filename: path.basename(abs),
+    folder,
+    path: url,
+    url,
+    size: stat.size,
+    updated_at: stat.mtime.toISOString(),
+    kind: kindOf(abs),
+  };
 }
 
 function collectMedia(dir: string, prefix: string, folder: string, allowed: Set<string>): UploadItem[] {
@@ -71,6 +84,17 @@ function collectFolder(folder: string): UploadItem[] {
   return collectImages(path.join(UPLOAD_ROOT, folder), `uploads/${folder}`, folder);
 }
 
+function s3ItemToUpload(item: {
+  filename: string;
+  folder: string;
+  path: string;
+  url: string;
+  size: number;
+  updated_at: string;
+}): UploadItem {
+  return { ...item, kind: kindOf(item.filename) };
+}
+
 /** GET /api/uploads/list?folder=Gallery[,Events] — omit folder for every public folder. */
 export async function listUploads(req: Request, res: Response, next: NextFunction) {
   try {
@@ -78,6 +102,16 @@ export async function listUploads(req: Request, res: Response, next: NextFunctio
     const requested = typeof req.query.folder === 'string' && req.query.folder.trim()
       ? req.query.folder.split(',').map((f) => allFolders.find((x) => x.toLowerCase() === f.trim().toLowerCase())).filter(Boolean) as string[]
       : allFolders;
+
+    if (isS3Enabled()) {
+      const folders = requested.filter((f) => f !== GENERAL_FOLDER);
+      const items = (await Promise.all(folders.map((folder) => listS3Folder(folder))))
+        .flat()
+        .map(s3ItemToUpload)
+        .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+      return sendSuccess(res, 'Uploads retrieved', items);
+    }
+
     const items = requested.flatMap(collectFolder).sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
     return sendSuccess(res, 'Uploads retrieved', items);
   } catch (err) {
@@ -85,15 +119,16 @@ export async function listUploads(req: Request, res: Response, next: NextFunctio
   }
 }
 
-/** POST /api/uploads?folder=News — multipart field "file"; saved to uploads/<folder>/. */
+/** POST /api/uploads?folder=News — multipart field "file"; saved to uploads/<folder>/ or S3. */
 export async function createUpload(req: Request, res: Response, next: NextFunction) {
   try {
     const file = (req as any).file as Express.Multer.File | undefined;
     if (!file) return sendError(res, 'Choose a file to upload.', 'VALIDATION_ERROR', 400);
-    const folder: string = (req as any).mediaFolder ?? DEFAULT_MEDIA_FOLDER;
-    const url = `/uploads/${folder}/${file.filename}`;
+    const folder = resolveMediaFolder(req.query.folder) ?? DEFAULT_MEDIA_FOLDER;
+    const filename = nextMediaFileName(folder, file.originalname);
+    const url = await storeUpload(folder, filename, fileBuffer(file), file.mimetype);
     return sendSuccess(res, 'File uploaded', {
-      filename: file.filename,
+      filename,
       folder,
       path: url,
       url,
@@ -118,6 +153,18 @@ export async function deleteUpload(req: Request, res: Response, next: NextFuncti
     if (folderParam && !mediaFolder && folderParam.toLowerCase() !== GENERAL_FOLDER.toLowerCase()) {
       return sendError(res, 'Unknown folder', 'VALIDATION_ERROR', 400);
     }
+
+    if (isS3Enabled()) {
+      const folders = mediaFolder ? [mediaFolder] : [...MEDIA_FOLDERS];
+      for (const folder of folders) {
+        if (await s3ObjectExists(`${folder}/${name}`)) {
+          await removeUpload(folder, name);
+          return sendSuccess(res, 'File deleted', { filename: name });
+        }
+      }
+      return sendError(res, 'File not found', 'NOT_FOUND', 404);
+    }
+
     const dirs = mediaFolder
       ? [path.join(UPLOAD_ROOT, mediaFolder)]
       : folderParam

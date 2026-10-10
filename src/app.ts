@@ -17,6 +17,7 @@ import accessRoutes from './routes/accessRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 
 import { errorHandler } from './middleware/errorHandler';
+import { serveUpload } from './middleware/uploadsServe';
 
 const app: Application = express();
 
@@ -35,6 +36,7 @@ app.use(
   })
 );
 
+app.get('/uploads/:folder/:filename', serveUpload);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 app.get('/health', (req: Request, res: Response) => {

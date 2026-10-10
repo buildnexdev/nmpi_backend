@@ -46,57 +46,38 @@ const videoFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFil
   }
 };
 
-function diskStorage(dir: string, prefix: string) {
-  return multer.diskStorage({
-    destination: (req, file, cb) => cb(null, dir),
-    filename: (req, file, cb) => {
-      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-      cb(null, `${prefix}_${uniqueSuffix}${path.extname(file.originalname).toLowerCase()}`);
-    },
-  });
-}
+const memory = multer.memoryStorage();
 
 /** IMG- / VID- YYYYMMDD-NNNNNN.ext, matching existing upload naming. */
-function mediaFileName(dir: string, ext: string, prefix: 'IMG' | 'VID' = 'IMG'): string {
+export function nextMediaFileName(folder: string, originalName: string): string {
+  const ext = path.extname(originalName).toLowerCase();
+  const prefix = folder === VIDEO_MEDIA_FOLDER ? 'VID' : 'IMG';
   const d = new Date();
   const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  for (;;) {
-    const name = `${prefix}-${stamp}-${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}${ext}`;
-    if (!fs.existsSync(path.join(dir, name))) return name;
-  }
+  return `${prefix}-${stamp}-${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}${ext}`;
+}
+
+export function nextProfileFileName(originalName: string): string {
+  const ext = path.extname(originalName).toLowerCase();
+  return `profile_${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
 }
 
 export const uploadProfileImage = multer({
-  storage: diskStorage(PROFILE_UPLOAD_DIR, 'profile'),
+  storage: memory,
   fileFilter: imageFileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-const mediaStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const folder = resolveMediaFolder(req.query.folder) ?? DEFAULT_MEDIA_FOLDER;
-    (req as any).mediaFolder = folder;
-    cb(null, path.join(UPLOADS_ROOT, folder));
-  },
-  filename: (req, file, cb) => {
-    const folder = (req as any).mediaFolder ?? DEFAULT_MEDIA_FOLDER;
-    const dir = path.join(UPLOADS_ROOT, folder);
-    const ext = path.extname(file.originalname).toLowerCase();
-    const prefix = folder === VIDEO_MEDIA_FOLDER ? 'VID' : 'IMG';
-    cb(null, mediaFileName(dir, ext, prefix));
-  },
-});
-
-/** Saves images into uploads/<folder>/ (Gallery, Events, News, Leaders). */
+/** Accepts images for uploads/<folder>/ (Gallery, Events, News, Leaders). */
 export const uploadMediaImage = multer({
-  storage: mediaStorage,
+  storage: memory,
   fileFilter: imageFileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-/** Saves videos into uploads/Videos/. */
+/** Accepts videos for uploads/Videos/. */
 export const uploadMediaVideo = multer({
-  storage: mediaStorage,
+  storage: memory,
   fileFilter: videoFileFilter,
   limits: { fileSize: 80 * 1024 * 1024 },
 });

@@ -1,10 +1,11 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import fs from 'fs';
 import { getDbConnection } from '../config/database';
 import { generateMemberId } from '../functions/generateMemberId';
 import { hashSensitiveData, encryptData, decryptData } from '../utils/security';
 import { generateMemberQrDataUrl } from '../utils/qrCodeGenerator';
+import { nextProfileFileName } from '../middleware/uploadMiddleware';
+import { fileBuffer, removeStoredUpload, storeUpload } from '../utils/uploadStorage';
 import { normalizePhone } from './authService';
 import { AuthUser, HttpError } from '../types';
 import { ROLES, ROLE_IDS, SELF_SELECTABLE_ROLE_IDS, MEMBER_STATUSES } from '../constants';
@@ -152,13 +153,8 @@ export class MemberService {
   }
 
   static async registerMember(data: any, profileFile?: Express.Multer.File) {
-    try {
-      this.validateRegistration(data);
-      if (!profileFile) throw fieldError('profile_image', 'Profile photo is required.');
-    } catch (err) {
-      if (profileFile) fs.unlink(profileFile.path, () => {});
-      throw err;
-    }
+    this.validateRegistration(data);
+    if (!profileFile) throw fieldError('profile_image', 'Profile photo is required.');
 
     const db = await getDbConnection();
     const countryCode = (data.country_code || '+91').trim();
@@ -177,7 +173,6 @@ export class MemberService {
     ];
     for (const [check, field, message] of duplicates) {
       if (await check) {
-        if (profileFile) fs.unlink(profileFile.path, () => {});
         throw new HttpError(409, message, 'DUPLICATE_ERROR', { field });
       }
     }
@@ -187,7 +182,13 @@ export class MemberService {
     const parliamentCode = parlRows[0].code || 'TN';
 
     const passwordHash = await bcrypt.hash(String(data.password), 10);
-    const profileImagePath = profileFile ? `/uploads/profiles/${profileFile.filename}` : null;
+    const profileFilename = nextProfileFileName(profileFile.originalname);
+    const profileImagePath = await storeUpload(
+      'profiles',
+      profileFilename,
+      fileBuffer(profileFile),
+      profileFile.mimetype,
+    );
 
     const conn = await db.getConnection();
     try {
@@ -253,7 +254,7 @@ export class MemberService {
       return { ...detail, verification_token: verificationToken, qr_data_url };
     } catch (err) {
       await conn.rollback();
-      if (profileFile) fs.unlink(profileFile.path, () => {});
+      await removeStoredUpload(profileImagePath);
       throw err;
     } finally {
       conn.release();

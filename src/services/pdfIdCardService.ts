@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { formatIdCardBloodGroup, formatIdCardDesignation, formatIdCardExpiry } from '../utils/idCardFormat';
 import { ID_CARD_LAYOUT } from '../utils/idCardLayout';
+import { parsePublicUploadPath, readUploadBuffer } from '../utils/uploadStorage';
 
 const CARD_W = 204;
 const CARD_H = 306;
@@ -33,6 +34,16 @@ function resolvePhotoPath(profileImage?: string | null): string | null {
   return abs;
 }
 
+async function resolvePhoto(profileImage?: string | null): Promise<Buffer | string | null> {
+  if (!profileImage) return null;
+  const parsed = parsePublicUploadPath(profileImage);
+  if (parsed) {
+    const buffer = await readUploadBuffer(parsed.folder, parsed.filename);
+    if (buffer) return buffer;
+  }
+  return resolvePhotoPath(profileImage);
+}
+
 export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> {
   return new Promise(async (resolve, reject) => {
     try {
@@ -54,12 +65,12 @@ export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> 
       const valueFont = hasTamil ? 'TamilBold' : 'Helvetica-Bold';
 
       const photoBox = box('photo');
-      const photoPath = resolvePhotoPath(memberData.profile_image);
-      if (photoPath) {
+      const photo = await resolvePhoto(memberData.profile_image);
+      if (photo) {
         try {
           doc.save();
           doc.roundedRect(photoBox.x, photoBox.y, photoBox.w, photoBox.h, 6).clip();
-          doc.image(photoPath, photoBox.x, photoBox.y, {
+          doc.image(photo, photoBox.x, photoBox.y, {
             cover: [photoBox.w, photoBox.h],
             align: 'center',
             valign: 'center',
