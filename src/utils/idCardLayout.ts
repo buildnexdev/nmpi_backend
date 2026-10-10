@@ -6,5 +6,5 @@ export const ID_CARD_LAYOUT = {
   memberId: { x: 0.449, y: 0.511, w: 0.48, h: 0.034 },
   designation: { x: 0.449, y: 0.607, w: 0.50, h: 0.058 },
   expiry: { x: 0.449, y: 0.715, w: 0.50, h: 0.03 },
-  qr: { x: 0.051, y: 0.758, size: 0.14 },
+  qr: { x: 0.035, y: 0.757, size: 0.176 },
 } as const;
