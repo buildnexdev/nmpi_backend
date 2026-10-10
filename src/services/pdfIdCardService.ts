@@ -81,6 +81,9 @@ export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> 
         }
       }
 
+      // Reset graphics state after photo clipping block
+      doc.fillColor('#111111').strokeColor('#111111');
+
       const texts: { key: FieldKey; value: string; font: string; size: number }[] = [
         { key: 'name', value: String(memberData.full_name || '').trim() || '—', font: valueFont, size: 8 },
         { key: 'bloodGroup', value: formatIdCardBloodGroup(memberData.blood_group), font: 'Helvetica-Bold', size: 7.2 },
@@ -91,12 +94,13 @@ export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> 
 
       for (const t of texts) {
         const b = box(t.key);
-        doc.fillColor('#111111').font(t.font).fontSize(t.size);
+        doc.font(t.font).fontSize(t.size).fillColor('#111111');
         doc.text(t.value, b.x, b.y, {
           width: b.w,
           height: b.h,
           lineGap: 0,
           ellipsis: true,
+          lineBreak: true,
           align: t.key === 'bloodGroup' ? 'right' : 'left',
         });
       }
