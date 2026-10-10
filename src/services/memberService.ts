@@ -183,12 +183,18 @@ export class MemberService {
 
     const passwordHash = await bcrypt.hash(String(data.password), 10);
     const profileFilename = nextProfileFileName(profileFile.originalname);
-    const profileImagePath = await storeUpload(
-      'profiles',
-      profileFilename,
-      fileBuffer(profileFile),
-      profileFile.mimetype,
-    );
+    let profileImagePath = '';
+    try {
+      profileImagePath = await storeUpload(
+        'profiles',
+        profileFilename,
+        fileBuffer(profileFile),
+        profileFile.mimetype || 'image/jpeg',
+      );
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(503, (err as Error)?.message || 'Could not save the profile photo.', 'UPLOAD_ERROR');
+    }
 
     const conn = await db.getConnection();
     try {

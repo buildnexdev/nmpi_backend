@@ -19,6 +19,7 @@ import { uploadProfileImage } from '../middleware/uploadMiddleware';
 import { authenticateJWT } from '../middleware/authMiddleware';
 import { requireRoles } from '../middleware/rbacMiddleware';
 import { CONTENT_ADMIN_ROLES, STAFF_ROLES } from '../constants';
+import { sendError } from '../utils/response';
 
 const router = Router();
 
@@ -27,7 +28,12 @@ router.get('/check-phone', checkPhone);
 router.get('/check-email', checkEmail);
 router.get('/check-aadhaar', checkAadhaar);
 router.get('/check-voter-id', checkVoterId);
-router.post('/register', uploadProfileImage.single('profile_image') as any, registerMember);
+router.post('/register', (req, res, next) => {
+  uploadProfileImage.single('profile_image')(req as any, res as any, (err: any) => {
+    if (err) return sendError(res, err.message || 'Profile photo upload failed', 'VALIDATION_ERROR', 400);
+    next();
+  });
+}, registerMember);
 router.get('/id-card/download', downloadIdCardWithToken);
 
 // Logged-in member

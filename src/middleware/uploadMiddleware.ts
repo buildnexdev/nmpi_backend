@@ -2,7 +2,10 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-export const UPLOADS_ROOT = path.join(process.cwd(), 'uploads');
+const fromEnv = (process.env.UPLOAD_DIR || '').trim();
+export const UPLOADS_ROOT = fromEnv
+  ? path.resolve(fromEnv)
+  : path.resolve(__dirname, '../../uploads');
 export const PROFILE_UPLOAD_DIR = path.join(UPLOADS_ROOT, 'profiles');
 export const ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 export const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov'];
@@ -49,8 +52,13 @@ const videoFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFil
 const memory = multer.memoryStorage();
 
 /** IMG- / VID- YYYYMMDD-NNNNNN.ext, matching existing upload naming. */
+function safeExt(originalName?: string): string {
+  const ext = path.extname(String(originalName || '')).toLowerCase();
+  return ext && ext.length <= 8 ? ext : '.jpg';
+}
+
 export function nextMediaFileName(folder: string, originalName: string): string {
-  const ext = path.extname(originalName).toLowerCase();
+  const ext = safeExt(originalName);
   const prefix = folder === VIDEO_MEDIA_FOLDER ? 'VID' : 'IMG';
   const d = new Date();
   const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -58,8 +66,7 @@ export function nextMediaFileName(folder: string, originalName: string): string 
 }
 
 export function nextProfileFileName(originalName: string): string {
-  const ext = path.extname(originalName).toLowerCase();
-  return `profile_${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+  return `profile_${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt(originalName)}`;
 }
 
 export const uploadProfileImage = multer({

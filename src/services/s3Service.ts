@@ -14,8 +14,12 @@ const ALL_FOLDERS = [...PUBLIC_FOLDERS, 'profiles'] as const;
 
 let client: S3Client | null = null;
 
+function env(name: string): string {
+  return String(process.env[name] || '').trim();
+}
+
 export function isS3Enabled(): boolean {
-  return Boolean(process.env.AWS_S3_BUCKET);
+  return Boolean(env('AWS_S3_BUCKET'));
 }
 
 export function isS3PublicFolder(folder: string): boolean {
@@ -27,16 +31,16 @@ export function isS3Folder(folder: string): boolean {
 }
 
 function requireBucket(): string {
-  const bucket = process.env.AWS_S3_BUCKET;
+  const bucket = env('AWS_S3_BUCKET');
   if (!bucket) throw new Error('AWS_S3_BUCKET is not set');
   return bucket;
 }
 
 function getClient(): S3Client {
   if (client) return client;
-  const region = process.env.AWS_REGION || process.env.AWS_S3_REGION || 'ap-south-1';
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const region = env('AWS_REGION') || env('AWS_S3_REGION') || 'ap-south-1';
+  const accessKeyId = env('AWS_ACCESS_KEY_ID');
+  const secretAccessKey = env('AWS_SECRET_ACCESS_KEY');
   client = new S3Client({
     region,
     ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
