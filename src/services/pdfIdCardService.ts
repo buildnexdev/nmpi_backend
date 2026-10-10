@@ -15,6 +15,11 @@ function asset(...parts: string[]) {
   return path.join(process.cwd(), 'assets', ...parts);
 }
 
+/** True if text contains Tamil Unicode characters (U+0B80–U+0BFF). */
+function isTamil(s: string): boolean {
+  return /[\u0B80-\u0BFF]/.test(s);
+}
+
 function box(key: FieldKey | 'qr') {
   if (key === 'qr') {
     const q = ID_CARD_LAYOUT.qr;
@@ -84,12 +89,18 @@ export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> 
       // Reset graphics state after photo clipping block
       doc.fillColor('#111111').strokeColor('#111111');
 
+      const nameVal = String(memberData.full_name || '').trim() || '—';
+      const desgVal = formatIdCardDesignation(memberData);
+
+      // NotoSansTamil has no Latin glyphs — choose font per field value
+      const pickFont = (val: string) => (hasTamil && isTamil(val) ? 'TamilBold' : 'Helvetica-Bold');
+
       const texts: { key: FieldKey; value: string; font: string; size: number }[] = [
-        { key: 'name', value: String(memberData.full_name || '').trim() || '—', font: valueFont, size: 8 },
-        { key: 'bloodGroup', value: formatIdCardBloodGroup(memberData.blood_group), font: 'Helvetica-Bold', size: 7.2 },
-        { key: 'memberId', value: String(memberData.member_id || '').trim(), font: 'Helvetica-Bold', size: 7.2 },
-        { key: 'designation', value: formatIdCardDesignation(memberData), font: valueFont, size: 6.6 },
-        { key: 'expiry', value: formatIdCardExpiry(memberData.created_at || memberData.updated_at), font: 'Helvetica-Bold', size: 7.2 },
+        { key: 'name',        value: nameVal,                                      font: pickFont(nameVal), size: 8 },
+        { key: 'bloodGroup',  value: formatIdCardBloodGroup(memberData.blood_group), font: 'Helvetica-Bold',  size: 7.2 },
+        { key: 'memberId',    value: String(memberData.member_id || '').trim(),    font: 'Helvetica-Bold',  size: 7.2 },
+        { key: 'designation', value: desgVal,                                      font: pickFont(desgVal), size: 6.6 },
+        { key: 'expiry',      value: formatIdCardExpiry(memberData.created_at || memberData.updated_at), font: 'Helvetica-Bold', size: 7.2 },
       ];
 
       for (const t of texts) {
@@ -106,8 +117,11 @@ export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> 
       }
 
       const qrBox = box('qr');
+      // Cover the template's pre-printed black QR — expand by 3pt each side to fully hide border
+      const qrPad = 3;
+      doc.rect(qrBox.x - qrPad, qrBox.y - qrPad, qrBox.w + qrPad * 2, qrBox.h + qrPad * 2).fill('white');
       const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify/${memberData.verification_token || 'TOKEN'}`;
-      const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 0, width: 280 });
+      const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 280 });
       const qrBuffer = Buffer.from(qrDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
       doc.image(qrBuffer, qrBox.x, qrBox.y, { fit: [qrBox.w, qrBox.h] });
 
