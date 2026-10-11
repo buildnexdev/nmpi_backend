@@ -22,6 +22,8 @@ const uploadRoutes_1 = __importDefault(require("./routes/uploadRoutes"));
 const errorHandler_1 = require("./middleware/errorHandler");
 const uploadsServe_1 = require("./middleware/uploadsServe");
 const app = (0, express_1.default)();
+// Render runs behind a reverse proxy — trust it for correct IP detection
+app.set('trust proxy', 1);
 app.use((0, helmet_1.default)({ crossOriginResourcePolicy: false }));
 app.use((0, cors_1.default)({ origin: '*', exposedHeaders: ['Content-Disposition'] }));
 app.use(express_1.default.json({ limit: '10mb' }));
@@ -38,7 +40,7 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'UP',
         service: 'NMPI Platform API',
-        build: 's3-2',
+        build: 's3-3',
         timestamp: new Date().toISOString(),
     });
 });

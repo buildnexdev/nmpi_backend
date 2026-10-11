@@ -9,6 +9,7 @@ import {
   downloadMyIdCard,
   downloadMemberIdCard,
   getMyProfile,
+  updateMyProfile,
   getMembers,
   exportMembersCsv,
   getMemberById,
@@ -38,6 +39,12 @@ router.get('/id-card/download', downloadIdCardWithToken);
 
 // Logged-in member
 router.get('/me', authenticateJWT, getMyProfile);
+router.patch('/me', authenticateJWT, (req, res, next) => {
+  uploadProfileImage.single('profile_image')(req as any, res as any, (err: any) => {
+    if (err) return sendError(res, err.message || 'Profile photo upload failed', 'VALIDATION_ERROR', 400);
+    next();
+  });
+}, updateMyProfile);
 router.get('/me/id-card', authenticateJWT, downloadMyIdCard);
 
 // Staff / administrators

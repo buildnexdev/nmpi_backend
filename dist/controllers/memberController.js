@@ -13,6 +13,7 @@ exports.downloadMyIdCard = downloadMyIdCard;
 exports.downloadMemberIdCard = downloadMemberIdCard;
 exports.verifyMemberByToken = verifyMemberByToken;
 exports.getMyProfile = getMyProfile;
+exports.updateMyProfile = updateMyProfile;
 exports.getMembers = getMembers;
 exports.exportMembersCsv = exportMembersCsv;
 exports.getMemberById = getMemberById;
@@ -165,6 +166,15 @@ async function getMyProfile(req, res, next) {
         if (!profile)
             return (0, response_1.sendError)(res, 'No membership record is linked to this account.', 'NOT_FOUND', 404);
         return (0, response_1.sendSuccess)(res, 'Profile retrieved successfully', profile);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+async function updateMyProfile(req, res, next) {
+    try {
+        const profile = await memberService_1.MemberService.updateMyProfile(req.user.id, req.body, req.file);
+        return (0, response_1.sendSuccess)(res, 'Profile updated successfully', profile);
     }
     catch (err) {
         next(err);

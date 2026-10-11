@@ -23,6 +23,13 @@ router.post('/register', (req, res, next) => {
 router.get('/id-card/download', memberController_1.downloadIdCardWithToken);
 // Logged-in member
 router.get('/me', authMiddleware_1.authenticateJWT, memberController_1.getMyProfile);
+router.patch('/me', authMiddleware_1.authenticateJWT, (req, res, next) => {
+    uploadMiddleware_1.uploadProfileImage.single('profile_image')(req, res, (err) => {
+        if (err)
+            return (0, response_1.sendError)(res, err.message || 'Profile photo upload failed', 'VALIDATION_ERROR', 400);
+        next();
+    });
+}, memberController_1.updateMyProfile);
 router.get('/me/id-card', authMiddleware_1.authenticateJWT, memberController_1.downloadMyIdCard);
 // Staff / administrators
 const staff = [authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)(constants_1.STAFF_ROLES)];

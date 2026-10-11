@@ -69,8 +69,8 @@ export const getVillages = listHandler('Villages retrieved successfully', (req) 
 });
 
 export const getRoles = listHandler('Roles retrieved successfully', () => ({
-  sql: `SELECT id, name, description FROM tblRoles WHERE id IN (?) ORDER BY id ASC`,
-  params: [SELF_SELECTABLE_ROLE_IDS],
+  sql: `SELECT id, name, description FROM tblRoles WHERE id IN (?, ?) ORDER BY id ASC`,
+  params: [...SELF_SELECTABLE_ROLE_IDS],
 }));
 
 export const getAllRoles = listHandler('Roles retrieved successfully', () => ({

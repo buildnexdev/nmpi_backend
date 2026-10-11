@@ -394,6 +394,99 @@ export class MemberService {
     return this.getMemberById(id, scope);
   }
 
+  static validateProfileUpdate(data: any) {
+    const required: Array<[string, string]> = [
+      ['full_name', 'Full name is required'],
+      ['father_name', "Father's name is required"],
+      ['date_of_birth', 'Date of birth is required'],
+      ['gender', 'Gender is required'],
+      ['parliament_constituency_id', 'Parliament constituency is required'],
+      ['district_id', 'District is required'],
+      ['block_id', 'Taluk / Block is required'],
+    ];
+    for (const [field, message] of required) {
+      if (data[field] === undefined || data[field] === null || String(data[field]).trim() === '' || String(data[field]) === '0') {
+        throw fieldError(field, message);
+      }
+    }
+    if (!['MALE', 'FEMALE', 'OTHER'].includes(data.gender)) throw fieldError('gender', 'Invalid gender');
+    if (!isValidDate(data.date_of_birth)) throw fieldError('date_of_birth', 'Invalid date of birth');
+    if (ageInYears(data.date_of_birth) < 18) throw fieldError('date_of_birth', 'Members must be at least 18 years old');
+    if (data.role_id !== undefined && data.role_id !== null && String(data.role_id).trim() !== '') {
+      const roleId = Number(data.role_id);
+      if (!SELF_SELECTABLE_ROLE_IDS.includes(roleId)) throw fieldError('role_id', 'Invalid membership type');
+    }
+  }
+
+  static async updateMyProfile(userId: number, data: any, profileFile?: Express.Multer.File) {
+    this.validateProfileUpdate(data);
+    const db = await getDbConnection();
+    const [existingRows]: any = await db.query('SELECT id, profile_image FROM tblMembers WHERE user_id = ?', [userId]);
+    const existing = existingRows[0];
+    if (!existing) throw new HttpError(404, 'No membership record is linked to this account.', 'NOT_FOUND');
+
+    const requestedRole = data.role_id !== undefined && data.role_id !== null && String(data.role_id).trim() !== ''
+      ? Number(data.role_id)
+      : null;
+    const roleId = requestedRole && SELF_SELECTABLE_ROLE_IDS.includes(requestedRole) ? requestedRole : null;
+
+    let profileImagePath: string | null = null;
+    if (profileFile) {
+      const profileFilename = nextProfileFileName(profileFile.originalname);
+      try {
+        profileImagePath = await storeUpload(
+          'profiles',
+          profileFilename,
+          fileBuffer(profileFile),
+          profileFile.mimetype || 'image/jpeg',
+        );
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(503, (err as Error)?.message || 'Could not save the profile photo.', 'UPLOAD_ERROR');
+      }
+    }
+
+    const params: any[] = [
+      String(data.full_name).trim(),
+      String(data.father_name).trim(),
+      data.date_of_birth,
+      data.gender,
+      data.blood_group || 'Unknown',
+      Number(data.state_id) || 1,
+      Number(data.parliament_constituency_id),
+      Number(data.assembly_constituency_id) || null,
+      Number(data.district_id),
+      Number(data.block_id),
+      Number(data.village_id) || null,
+      data.address_line1 || null,
+      data.village_custom || null,
+    ];
+
+    let sql = `UPDATE tblMembers SET
+      full_name = ?, father_name = ?, date_of_birth = ?, gender = ?, blood_group = ?,
+      state_id = ?, parliament_constituency_id = ?, assembly_constituency_id = ?,
+      district_id = ?, block_id = ?, village_id = ?, address_line1 = ?, village_custom = ?`;
+
+    if (roleId !== null) {
+      sql += ', role_id = ?';
+      params.push(roleId);
+    }
+    if (profileImagePath) {
+      sql += ', profile_image = ?';
+      params.push(profileImagePath);
+    }
+    sql += ' WHERE user_id = ?';
+    params.push(userId);
+
+    await db.query(sql, params);
+
+    if (profileImagePath && existing.profile_image) {
+      await removeStoredUpload(existing.profile_image);
+    }
+
+    return this.getProfileByUserId(userId);
+  }
+
   static async updateRole(id: number, roleId: number, actor: AuthUser) {
     const db = await getDbConnection();
     const [roles]: any = await db.query('SELECT id, name FROM tblRoles WHERE id = ?', [roleId]);

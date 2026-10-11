@@ -146,6 +146,15 @@ export async function getMyProfile(req: AuthRequest, res: Response, next: NextFu
   }
 }
 
+export async function updateMyProfile(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const profile = await MemberService.updateMyProfile(req.user!.id, req.body, req.file);
+    return sendSuccess(res, 'Profile updated successfully', profile);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getMembers(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const scope = await MemberService.getStaffScope(req.user!);

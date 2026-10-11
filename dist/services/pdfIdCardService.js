@@ -16,6 +16,10 @@ const CARD_H = 306;
 function asset(...parts) {
     return path_1.default.join(process.cwd(), 'assets', ...parts);
 }
+/** True if text contains Tamil Unicode characters (U+0B80–U+0BFF). */
+function isTamil(s) {
+    return /[\u0B80-\u0BFF]/.test(s);
+}
 function box(key) {
     if (key === 'qr') {
         const q = idCardLayout_1.ID_CARD_LAYOUT.qr;
@@ -80,27 +84,37 @@ async function generateMemberIdCardPdf(memberData) {
                     /* leave template photo hole */
                 }
             }
+            // Reset graphics state after photo clipping block
+            doc.fillColor('#111111').strokeColor('#111111');
+            const nameVal = String(memberData.full_name || '').trim() || '—';
+            const desgVal = (0, idCardFormat_1.formatIdCardDesignation)(memberData);
+            // NotoSansTamil has no Latin glyphs — choose font per field value
+            const pickFont = (val) => (hasTamil && isTamil(val) ? 'TamilBold' : 'Helvetica-Bold');
             const texts = [
-                { key: 'name', value: String(memberData.full_name || '').trim() || '—', font: valueFont, size: 8 },
+                { key: 'name', value: nameVal, font: pickFont(nameVal), size: 8 },
                 { key: 'bloodGroup', value: (0, idCardFormat_1.formatIdCardBloodGroup)(memberData.blood_group), font: 'Helvetica-Bold', size: 7.2 },
                 { key: 'memberId', value: String(memberData.member_id || '').trim(), font: 'Helvetica-Bold', size: 7.2 },
-                { key: 'designation', value: (0, idCardFormat_1.formatIdCardDesignation)(memberData), font: valueFont, size: 6.6 },
+                { key: 'designation', value: desgVal, font: pickFont(desgVal), size: 6.6 },
                 { key: 'expiry', value: (0, idCardFormat_1.formatIdCardExpiry)(memberData.created_at || memberData.updated_at), font: 'Helvetica-Bold', size: 7.2 },
             ];
             for (const t of texts) {
                 const b = box(t.key);
-                doc.fillColor('#111111').font(t.font).fontSize(t.size);
+                doc.font(t.font).fontSize(t.size).fillColor('#111111');
                 doc.text(t.value, b.x, b.y, {
                     width: b.w,
                     height: b.h,
                     lineGap: 0,
                     ellipsis: true,
+                    lineBreak: true,
                     align: t.key === 'bloodGroup' ? 'right' : 'left',
                 });
             }
             const qrBox = box('qr');
+            // Cover the template's pre-printed black QR — expand by 3pt each side to fully hide border
+            const qrPad = 3;
+            doc.rect(qrBox.x - qrPad, qrBox.y - qrPad, qrBox.w + qrPad * 2, qrBox.h + qrPad * 2).fill('white');
             const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify/${memberData.verification_token || 'TOKEN'}`;
-            const qrDataUrl = await qrcode_1.default.toDataURL(verifyUrl, { margin: 0, width: 280 });
+            const qrDataUrl = await qrcode_1.default.toDataURL(verifyUrl, { margin: 1, width: 280 });
             const qrBuffer = Buffer.from(qrDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
             doc.image(qrBuffer, qrBox.x, qrBox.y, { fit: [qrBox.w, qrBox.h] });
             doc.end();
