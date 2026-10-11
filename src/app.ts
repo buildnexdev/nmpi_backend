@@ -21,6 +21,9 @@ import { serveUpload } from './middleware/uploadsServe';
 
 const app: Application = express();
 
+// Render runs behind a reverse proxy — trust it for correct IP detection
+app.set('trust proxy', 1);
+
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({ origin: '*', exposedHeaders: ['Content-Disposition'] }));
 app.use(express.json({ limit: '10mb' }));
@@ -43,7 +46,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'UP',
     service: 'NMPI Platform API',
-    build: 's3-2',
+    build: 's3-3',
     timestamp: new Date().toISOString(),
   });
 });
