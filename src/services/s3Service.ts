@@ -110,6 +110,19 @@ export async function getS3MediaUrl(key: string, expiresIn = 3600): Promise<stri
   );
 }
 
+export async function testS3Get(key: string): Promise<{ success: boolean; error?: string; length?: number }> {
+  try {
+    const obj = await getClient().send(new GetObjectCommand({
+      Bucket: requireBucket(),
+      Key: key,
+    }));
+    const bytes = await obj.Body?.transformToByteArray();
+    return { success: true, length: bytes?.length };
+  } catch (err: any) {
+    return { success: false, error: `${err?.name}: ${err?.message} (HTTP ${err?.$metadata?.httpStatusCode})` };
+  }
+}
+
 export async function s3ObjectExists(key: string): Promise<boolean> {
   try {
     await getClient().send(new HeadObjectCommand({
@@ -117,7 +130,8 @@ export async function s3ObjectExists(key: string): Promise<boolean> {
       Key: key,
     }));
     return true;
-  } catch {
+  } catch (err: any) {
+    console.error(`[s3ObjectExists] Failed for key "${key}":`, err?.name, err?.message);
     return false;
   }
 }
