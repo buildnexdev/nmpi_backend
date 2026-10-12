@@ -64,10 +64,16 @@ export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> 
 
       doc.image(templatePath, 0, 0, { width: CARD_W, height: CARD_H });
 
-      const tamilFont = asset('fonts', 'NotoSansTamil-Bold.ttf');
-      const hasTamil = fs.existsSync(tamilFont);
-      if (hasTamil) doc.registerFont('TamilBold', tamilFont);
-      const valueFont = hasTamil ? 'TamilBold' : 'Helvetica-Bold';
+      const muktaFont = asset('fonts', 'MuktaMalar-Bold.ttf');
+      const notoFont = asset('fonts', 'NotoSansTamil-Bold.ttf');
+      const hasMukta = fs.existsSync(muktaFont);
+      const hasNoto = fs.existsSync(notoFont);
+
+      if (hasMukta) {
+        doc.registerFont('CardFont', muktaFont);
+      } else if (hasNoto) {
+        doc.registerFont('CardFont', notoFont);
+      }
 
       const photoBox = box('photo');
       const photo = await resolvePhoto(memberData.profile_image);
@@ -92,28 +98,49 @@ export async function generateMemberIdCardPdf(memberData: any): Promise<Buffer> 
       const nameVal = String(memberData.full_name || '').trim() || '—';
       const desgVal = formatIdCardDesignation(memberData);
 
-      // NotoSansTamil has no Latin glyphs — choose font per field value
-      const pickFont = (val: string) => (hasTamil && isTamil(val) ? 'TamilBold' : 'Helvetica-Bold');
+      // Choose appropriate font for a given string:
+      // MuktaMalar supports both Latin & Tamil natively.
+      // If only NotoSansTamil is available, fall back to Helvetica-Bold when string is purely non-Tamil.
+      const pickFont = (val: string) => {
+        if (hasMukta) return 'CardFont';
+        if (hasNoto && isTamil(val)) return 'CardFont';
+        return 'Helvetica-Bold';
+      };
 
-      const texts: { key: FieldKey; value: string; font: string; size: number }[] = [
-        { key: 'name',        value: nameVal,                                      font: pickFont(nameVal), size: 8 },
-        { key: 'bloodGroup',  value: formatIdCardBloodGroup(memberData.blood_group), font: 'Helvetica-Bold',  size: 7.2 },
-        { key: 'memberId',    value: String(memberData.member_id || '').trim(),    font: 'Helvetica-Bold',  size: 7.2 },
-        { key: 'designation', value: desgVal,                                      font: pickFont(desgVal), size: 6.6 },
-        { key: 'expiry',      value: formatIdCardExpiry(memberData.created_at || memberData.updated_at), font: 'Helvetica-Bold', size: 7.2 },
+      const texts: { key: FieldKey; value: string; size: number }[] = [
+        { key: 'name',        value: nameVal,                                      size: 8 },
+        { key: 'bloodGroup',  value: formatIdCardBloodGroup(memberData.blood_group), size: 7.2 },
+        { key: 'memberId',    value: String(memberData.member_id || '').trim(),    size: 7.2 },
+        { key: 'designation', value: desgVal,                                      size: 6.6 },
+        { key: 'expiry',      value: formatIdCardExpiry(memberData.created_at || memberData.updated_at), size: 7.2 },
       ];
 
       for (const t of texts) {
         const b = box(t.key);
-        doc.font(t.font).fontSize(t.size).fillColor('#111111');
-        doc.text(t.value, b.x, b.y, {
-          width: b.w,
-          height: b.h,
-          lineGap: 0,
-          ellipsis: true,
-          lineBreak: true,
-          align: t.key === 'bloodGroup' ? 'right' : 'left',
-        });
+        doc.fontSize(t.size).fillColor('#111111');
+
+        if (t.value.includes('\n')) {
+          // Render multi-line values line-by-line to prevent control characters from triggering .notdef glyphs
+          const lines = t.value.split('\n').map((l) => l.trim()).filter(Boolean);
+          const lineH = t.size + 2.2;
+          lines.forEach((line, idx) => {
+            doc.font(pickFont(line)).text(line, b.x, b.y + idx * lineH, {
+              width: b.w,
+              lineBreak: false,
+              ellipsis: true,
+              align: 'left',
+            });
+          });
+        } else {
+          doc.font(pickFont(t.value)).text(t.value, b.x, b.y, {
+            width: b.w,
+            height: b.h,
+            lineGap: 0,
+            ellipsis: true,
+            lineBreak: false,
+            align: t.key === 'bloodGroup' ? 'right' : 'left',
+          });
+        }
       }
 
       const qrBox = box('qr');
