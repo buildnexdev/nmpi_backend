@@ -70,6 +70,20 @@ export async function checkVoterId(req: Request, res: Response, next: NextFuncti
   }
 }
 
+export async function lookupMemberByPhone(req: Request, res: Response, next: NextFunction) {
+  try {
+    const phoneNumber = String(req.body.phone_number || req.body.phone || req.query.phone || '').trim();
+    const countryCode = String(req.body.country_code || req.query.countryCode || '+91').trim();
+    if (!phoneNumber) {
+      return sendError(res, 'Phone number is required', 'VALIDATION_ERROR', 400);
+    }
+    const result = await MemberService.lookupByPhone(phoneNumber, countryCode);
+    return sendSuccess(res, 'Member identified successfully', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 /** Remove a multer-saved upload when the registration it belonged to did not go through. */
 function discardUpload(file?: Express.Multer.File) {
   if (!file?.path) return;
@@ -149,7 +163,8 @@ export async function getMyProfile(req: AuthRequest, res: Response, next: NextFu
 export async function updateMyProfile(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const profile = await MemberService.updateMyProfile(req.user!.id, req.body, req.file);
-    return sendSuccess(res, 'Profile updated successfully', profile);
+    const id_card_token = profile ? jwt.sign({ purpose: ID_CARD_TOKEN_PURPOSE, member_db_id: profile.id }, JWT_SECRET, { expiresIn: '1h' }) : undefined;
+    return sendSuccess(res, 'Profile updated successfully', { ...profile, id_card_token });
   } catch (err) {
     next(err);
   }

@@ -9,6 +9,9 @@ import { fileBuffer, removeStoredUpload, storeUpload } from '../utils/uploadStor
 import { normalizePhone } from './authService';
 import { AuthUser, HttpError } from '../types';
 import { ROLES, ROLE_IDS, SELF_SELECTABLE_ROLE_IDS, MEMBER_STATUSES } from '../constants';
+import { sendNewMemberEnrollmentEmail } from './emailService';
+import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../middleware/authMiddleware';
 
 export interface StaffScope {
   column: string;
@@ -119,6 +122,65 @@ export class MemberService {
       hashSensitiveData(voterId.replace(/\s+/g, '').toUpperCase()),
     ]);
     return rows.length > 0;
+  }
+
+  static async lookupByPhone(phoneNumber: string, countryCode: string = '+91') {
+    const db = await getDbConnection();
+    const cleanPhone = normalizePhone(phoneNumber);
+    if (!cleanPhone || cleanPhone.length < 10) {
+      throw new HttpError(400, 'Please enter a valid 10-digit mobile number', 'VALIDATION_ERROR', { field: 'phone_number' });
+    }
+    const cleanCountry = (countryCode || '+91').trim();
+    const [rows]: any = await db.query(
+      `SELECT ${DETAIL_COLUMNS} FROM tblMembers m ${DETAIL_JOINS} WHERE m.phone_number = ? OR (m.country_code = ? AND m.phone_number = ?) ORDER BY m.id DESC LIMIT 1`,
+      [cleanPhone, cleanCountry, cleanPhone]
+    );
+    const raw = rows[0];
+    if (!raw) {
+      throw new HttpError(404, 'No registered member found with this mobile number. Please check the number or register as a new member.', 'NOT_FOUND');
+    }
+    const detail = toSafeDetail(raw);
+    const qr_data_url = detail.verification_token ? await generateMemberQrDataUrl(detail.verification_token) : null;
+    const id_card_token = jwt.sign({ purpose: 'id-card-download', member_db_id: raw.id }, JWT_SECRET, { expiresIn: '1h' });
+    const member = { ...detail, qr_data_url, id_card_token };
+
+    const [userRows]: any = await db.query('SELECT email, status FROM tblUsers WHERE id = ?', [raw.user_id]);
+    const userRow = userRows[0];
+    const [roleRows]: any = await db.query(
+      'SELECT r.name FROM tblUser_roles ur JOIN tblRoles r ON ur.role_id = r.id WHERE ur.user_id = ?',
+      [raw.user_id]
+    );
+    const roles = roleRows.length > 0 ? roleRows.map((r: any) => r.name) : ['MEMBER'];
+
+    const token = jwt.sign(
+      {
+        id: raw.user_id,
+        email: raw.email || userRow?.email,
+        phone_number: raw.phone_number,
+        roles,
+        member_db_id: raw.id,
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const user = {
+      id: raw.user_id,
+      email: raw.email || userRow?.email,
+      phone_number: raw.phone_number,
+      roles,
+      role_names: roles,
+      member: {
+        id: raw.id,
+        member_id: raw.member_id,
+        full_name: raw.full_name,
+        profile_image: raw.profile_image,
+        status: raw.status,
+        role_name: raw.role_name,
+      },
+    };
+
+    return { token, user, member };
   }
 
   static validateRegistration(data: any) {
@@ -260,6 +322,12 @@ export class MemberService {
 
       const detail = await this.getMemberById(memberDbId, null);
       const qr_data_url = await generateMemberQrDataUrl(verificationToken);
+
+      // Notify official email about the new enrollment
+      sendNewMemberEnrollmentEmail(detail).catch((err) => {
+        console.error('Email notification dispatch error:', err);
+      });
+
       return { ...detail, verification_token: verificationToken, qr_data_url };
     } catch (err: any) {
       await conn.rollback();

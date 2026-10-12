@@ -29,7 +29,7 @@ export function formatIdCardBloodGroup(value?: string | null): string {
   return v;
 }
 
-/** Role / position line on the card (பதவி) — custom designation if provided, else role plus area. */
+/** Role / position line on the card (பதவி) — padhavi / role plus area (place name), as on the printed ID. */
 export function formatIdCardDesignation(member: {
   designation?: string | null;
   role_name?: string | null;
@@ -37,10 +37,12 @@ export function formatIdCardDesignation(member: {
   block_name_ta?: string | null;
 }): string {
   const custom = String(member.designation || '').trim();
-  if (custom) return custom;
   const role = String(member.role_name || 'Member').trim();
-  const roleTa = ID_CARD_ROLE_TA[role] || role;
+  const title = custom || ID_CARD_ROLE_TA[role] || role;
   const place = String(member.block_name_ta || member.block_name || '').trim();
-  return place ? `${roleTa},\n${place}` : roleTa;
+  if (place && !title.toLowerCase().includes(place.toLowerCase())) {
+    return `${title},\n${place}`;
+  }
+  return title;
 }
 

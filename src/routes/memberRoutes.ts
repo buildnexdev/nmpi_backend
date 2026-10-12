@@ -4,6 +4,7 @@ import {
   checkEmail,
   checkAadhaar,
   checkVoterId,
+  lookupMemberByPhone,
   registerMember,
   downloadIdCardWithToken,
   downloadMyIdCard,
@@ -29,6 +30,7 @@ router.get('/check-phone', checkPhone);
 router.get('/check-email', checkEmail);
 router.get('/check-aadhaar', checkAadhaar);
 router.get('/check-voter-id', checkVoterId);
+router.post('/lookup-by-phone', lookupMemberByPhone);
 router.post('/register', (req, res, next) => {
   uploadProfileImage.single('profile_image')(req as any, res as any, (err: any) => {
     if (err) return sendError(res, err.message || 'Profile photo upload failed', 'VALIDATION_ERROR', 400);
