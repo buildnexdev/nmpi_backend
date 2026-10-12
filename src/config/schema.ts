@@ -172,29 +172,38 @@ async function retargetLegacyForeignKeys(db: PoolConnection): Promise<void> {
     grouped.set(key, list);
   }
 
-  for (const cols of grouped.values()) {
-    const first = cols[0];
-    const mapped = LEGACY_TABLE_MAP[String(first.ref_table || '').toLowerCase()];
-    if (!mapped) continue;
-    const target = existingByLower.get(mapped.toLowerCase());
-    if (!target || String(first.ref_table).toLowerCase() === target.toLowerCase()) continue;
+  await db.query('SET FOREIGN_KEY_CHECKS = 0');
+  try {
+    for (const cols of grouped.values()) {
+      const first = cols[0];
+      const mapped = LEGACY_TABLE_MAP[String(first.ref_table || '').toLowerCase()];
+      if (!mapped) continue;
+      const target = existingByLower.get(mapped.toLowerCase());
+      if (!target || String(first.ref_table).toLowerCase() === target.toLowerCase()) continue;
 
-    const table = first.table_name;
-    const constraint = first.constraint_name;
-    const colList = cols.map((c: any) => `\`${c.column_name}\``).join(', ');
-    const refList = cols.map((c: any) => `\`${c.ref_column}\``).join(', ');
-    const onDelete = first.delete_rule && !['RESTRICT', 'NO ACTION'].includes(first.delete_rule)
-      ? ` ON DELETE ${first.delete_rule}`
-      : '';
-    const onUpdate = first.update_rule && !['RESTRICT', 'NO ACTION'].includes(first.update_rule)
-      ? ` ON UPDATE ${first.update_rule}`
-      : '';
+      const table = first.table_name;
+      const constraint = first.constraint_name;
+      const colList = cols.map((c: any) => `\`${c.column_name}\``).join(', ');
+      const refList = cols.map((c: any) => `\`${c.ref_column}\``).join(', ');
+      const onDelete = first.delete_rule && !['RESTRICT', 'NO ACTION'].includes(first.delete_rule)
+        ? ` ON DELETE ${first.delete_rule}`
+        : '';
+      const onUpdate = first.update_rule && !['RESTRICT', 'NO ACTION'].includes(first.update_rule)
+        ? ` ON UPDATE ${first.update_rule}`
+        : '';
 
-    await db.query(`ALTER TABLE \`${table}\` DROP FOREIGN KEY \`${constraint}\``);
-    await db.query(
-      `ALTER TABLE \`${table}\` ADD CONSTRAINT \`${constraint}\` FOREIGN KEY (${colList}) REFERENCES \`${target}\` (${refList})${onDelete}${onUpdate}`
-    );
-    console.log(`Retargeted FK ${table}.${constraint} -> ${target}`);
+      try {
+        await db.query(`ALTER TABLE \`${table}\` DROP FOREIGN KEY \`${constraint}\``);
+        await db.query(
+          `ALTER TABLE \`${table}\` ADD CONSTRAINT \`${constraint}\` FOREIGN KEY (${colList}) REFERENCES \`${target}\` (${refList})${onDelete}${onUpdate}`
+        );
+        console.log(`Retargeted FK ${table}.${constraint} -> ${target}`);
+      } catch (err: any) {
+        console.warn(`Could not retarget FK ${table}.${constraint}:`, err?.message);
+      }
+    }
+  } finally {
+    await db.query('SET FOREIGN_KEY_CHECKS = 1').catch(() => {});
   }
 }
 
