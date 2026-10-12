@@ -243,17 +243,19 @@ async function createAndSeed(db: PoolConnection): Promise<void> {
   await ensureNewsColumns(db);
   await ensureMemberColumns(db);
 
-  const [[leaderCount]]: any = await db.query('SELECT COUNT(*) AS c FROM tblLeaders');
-  if (Number(leaderCount.c) === 0) {
-    let order = 1;
-    for (const [name, nameTa, district, districtTa, qualification] of SEED_LEADERS) {
-      await db.query(
-        `INSERT INTO tblLeaders (name, name_ta, designation, designation_ta, district, district_ta, qualification, display_order)
-         VALUES (?, ?, 'District Secretary', 'மாவட்டச் செயலாளர்', ?, ?, ?, ?)`,
-        [name, nameTa, district, districtTa, qualification, order++]
-      );
-    }
-  }
+  // Clean up any default dummy seeded leaders and do NOT re-insert default values
+  const dummyLeaderNames = [
+    'Mr. M. Sivakumar',
+    'Mr. VKR.S. Thiyagarajan',
+    'Mr. Thaiyur S. Kumaravel',
+    'Mrs. J. Kamatchi',
+    'Mr. D. Sarath Kumar',
+    'Mr. M.S. Balaji (A) Manikandan',
+  ];
+  await db.query(
+    `DELETE FROM tblLeaders WHERE name IN (${dummyLeaderNames.map(() => '?').join(', ')})`,
+    dummyLeaderNames
+  ).catch(() => {});
 
   await db.query("DELETE FROM tblOrganization_pages WHERE page_key = 'history'");
 

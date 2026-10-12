@@ -24,17 +24,15 @@ export class CmsService {
   static async listLeaders(includeInactive: boolean) {
     const db = await getDbConnection();
     const [leaders]: any = await db.query(
-      `SELECT * FROM tblLeaders ${includeInactive ? '' : "WHERE status = 'ACTIVE'"} ORDER BY display_order ASC, id ASC`
+      `SELECT *, 0 AS is_live_member FROM tblLeaders ${includeInactive ? '' : "WHERE status = 'ACTIVE'"} ORDER BY display_order ASC, id ASC`
     );
-
-    if (includeInactive) {
-      return leaders;
-    }
 
     try {
       const [members]: any = await db.query(`
         SELECT 
           (100000 + m.id) AS id,
+          m.id AS member_pk,
+          m.member_id,
           m.full_name AS name,
           m.full_name AS name_ta,
           COALESCE(NULLIF(TRIM(m.designation), ''), r.name, 'Member') AS designation,
@@ -47,11 +45,12 @@ export class CmsService {
           m.email,
           NULL AS bio,
           999 AS display_order,
-          'ACTIVE' AS status
+          ${includeInactive ? 'm.status' : "'ACTIVE'"} AS status,
+          1 AS is_live_member
         FROM tblMembers m
         LEFT JOIN tblDistricts d ON m.district_id = d.id
         LEFT JOIN tblRoles r ON m.role_id = r.id
-        WHERE m.status = 'APPROVED'
+        WHERE ${includeInactive ? "m.status IN ('APPROVED', 'PENDING')" : "m.status = 'APPROVED'"}
           AND (
             (m.designation IS NOT NULL AND TRIM(m.designation) != '' AND LOWER(TRIM(m.designation)) NOT IN ('member', 'உறுப்பினர்'))
             OR m.role_id IN (3, 4, 5, 6, 7)
