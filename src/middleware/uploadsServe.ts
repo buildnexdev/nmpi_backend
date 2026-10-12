@@ -1,5 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
-import { canonicalS3Folder, getS3Object, isS3Enabled } from '../services/s3Service';
+import path from 'path';
+import { canonicalS3Folder, getS3ObjectBuffer, isS3Enabled } from '../services/s3Service';
+
+const MIME_MAP: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.pdf': 'application/pdf',
+};
 
 export async function serveUpload(req: Request, res: Response, next: NextFunction) {
   if (!isS3Enabled()) return next();
@@ -12,21 +26,20 @@ export async function serveUpload(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const obj = await getS3Object(`${canonical}/${filename}`);
-    res.setHeader('Content-Type', obj.contentType);
+    const key = `${canonical}/${filename}`;
+    const buffer = await getS3ObjectBuffer(key);
+    if (!buffer) {
+      console.warn(`[serveUpload] Object not found in S3: ${key}`);
+      return next();
+    }
+    const ext = path.extname(filename).toLowerCase();
+    const contentType = MIME_MAP[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    if (obj.contentLength) res.setHeader('Content-Length', String(obj.contentLength));
-    if (typeof obj.body.pipe === 'function') {
-      obj.body.on('error', next);
-      obj.body.pipe(res);
-      return;
-    }
-    const chunks: Buffer[] = [];
-    for await (const chunk of obj.body) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    res.send(Buffer.concat(chunks));
-  } catch {
+    res.setHeader('Content-Length', String(buffer.length));
+    return res.end(buffer);
+  } catch (err: any) {
+    console.error(`[serveUpload] Error serving ${canonical}/${filename}:`, err?.name, err?.message);
     next();
   }
 }

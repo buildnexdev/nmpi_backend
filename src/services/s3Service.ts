@@ -96,7 +96,8 @@ export async function getS3ObjectBuffer(key: string): Promise<Buffer | null> {
     if (!obj.Body) return null;
     const bytes = await obj.Body.transformToByteArray();
     return Buffer.from(bytes);
-  } catch {
+  } catch (err: any) {
+    console.error(`[getS3ObjectBuffer] Failed for key "${key}":`, err?.name, err?.message);
     return null;
   }
 }

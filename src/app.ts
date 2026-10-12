@@ -18,6 +18,7 @@ import uploadRoutes from './routes/uploadRoutes';
 
 import { errorHandler } from './middleware/errorHandler';
 import { serveUpload } from './middleware/uploadsServe';
+import { isS3Enabled, getS3ObjectBuffer, s3ObjectExists } from './services/s3Service';
 
 const app: Application = express();
 
@@ -42,11 +43,33 @@ app.use(
 app.get('/uploads/:folder/:filename', serveUpload);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', async (req: Request, res: Response) => {
+  let s3Probe: any = { enabled: isS3Enabled() };
+  if (isS3Enabled()) {
+    try {
+      const probeKey = 'Gallery/IMG-20261012-345378.jpg';
+      const exists = await s3ObjectExists(probeKey);
+      const buf = exists ? await getS3ObjectBuffer(probeKey) : null;
+      s3Probe = {
+        enabled: true,
+        bucket: process.env.AWS_S3_BUCKET,
+        region: process.env.AWS_REGION || process.env.AWS_S3_REGION || 'ap-south-1',
+        testKey: probeKey,
+        exists,
+        bufferSize: buf ? buf.length : null,
+      };
+    } catch (err: any) {
+      s3Probe = {
+        enabled: true,
+        error: `${err?.name}: ${err?.message}`,
+      };
+    }
+  }
   res.json({
     status: 'UP',
     service: 'NMPI Platform API',
-    build: 's3-3',
+    build: 's3-direct-buffer-v4',
+    s3: s3Probe,
     timestamp: new Date().toISOString(),
   });
 });
