@@ -104,15 +104,97 @@ const SEED_PAGES = [
   },
 ];
 
+const LEGACY_TABLE_MAP: Record<string, string> = {
+  users: 'tblUsers',
+  members: 'tblMembers',
+  roles: 'tblRoles',
+  user_roles: 'tblUser_roles',
+  states: 'tblStates',
+  districts: 'tblDistricts',
+  blocks: 'tblBlocks',
+  villages: 'tblVillages',
+  parliament_constituencies: 'tblParliament_constituencies',
+  assembly_constituencies: 'tblAssembly_constituencies',
+  news: 'tblNews',
+  events: 'tblEvents',
+  leaders: 'tblLeaders',
+  organization_pages: 'tblOrganization_pages',
+  member_qr_codes: 'tblMember_qr_codes',
+};
+
 export async function ensureSchema(pool: Pool): Promise<void> {
   // Dev-server restarts can overlap; a named lock keeps the one-time seed from running twice.
   const db = await pool.getConnection();
   try {
     await db.query("SELECT GET_LOCK('nmpi_ensure_schema', 30)");
     await createAndSeed(db);
+    await retargetLegacyForeignKeys(db);
   } finally {
     await db.query("SELECT RELEASE_LOCK('nmpi_ensure_schema')").catch(() => {});
     db.release();
+  }
+}
+
+/** Live dump renamed tables to tbl*, but some FKs still point at users/roles/members. */
+async function retargetLegacyForeignKeys(db: PoolConnection): Promise<void> {
+  const [rows]: any = await db.query(`
+    SELECT
+      k.TABLE_NAME AS table_name,
+      k.CONSTRAINT_NAME AS constraint_name,
+      k.COLUMN_NAME AS column_name,
+      k.REFERENCED_TABLE_NAME AS ref_table,
+      k.REFERENCED_COLUMN_NAME AS ref_column,
+      rc.DELETE_RULE AS delete_rule,
+      rc.UPDATE_RULE AS update_rule,
+      k.ORDINAL_POSITION AS pos
+    FROM information_schema.KEY_COLUMN_USAGE k
+    INNER JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+      ON rc.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA
+     AND rc.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+     AND rc.TABLE_NAME = k.TABLE_NAME
+    WHERE k.TABLE_SCHEMA = DATABASE()
+      AND k.REFERENCED_TABLE_NAME IS NOT NULL
+    ORDER BY k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION
+  `);
+
+  const [tableRows]: any = await db.query(
+    'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()'
+  );
+  const existingByLower = new Map<string, string>(
+    tableRows.map((t: any) => [String(t.TABLE_NAME).toLowerCase(), String(t.TABLE_NAME)])
+  );
+
+  const grouped = new Map<string, any[]>();
+  for (const row of rows) {
+    const key = `${row.table_name}::${row.constraint_name}`;
+    const list = grouped.get(key) || [];
+    list.push(row);
+    grouped.set(key, list);
+  }
+
+  for (const cols of grouped.values()) {
+    const first = cols[0];
+    const mapped = LEGACY_TABLE_MAP[String(first.ref_table || '').toLowerCase()];
+    if (!mapped) continue;
+    const target = existingByLower.get(mapped.toLowerCase());
+    if (!target || String(first.ref_table).toLowerCase() === target.toLowerCase()) continue;
+
+    const table = first.table_name;
+    const constraint = first.constraint_name;
+    const colList = cols.map((c: any) => `\`${c.column_name}\``).join(', ');
+    const refList = cols.map((c: any) => `\`${c.ref_column}\``).join(', ');
+    const onDelete = first.delete_rule && !['RESTRICT', 'NO ACTION'].includes(first.delete_rule)
+      ? ` ON DELETE ${first.delete_rule}`
+      : '';
+    const onUpdate = first.update_rule && !['RESTRICT', 'NO ACTION'].includes(first.update_rule)
+      ? ` ON UPDATE ${first.update_rule}`
+      : '';
+
+    await db.query(`ALTER TABLE \`${table}\` DROP FOREIGN KEY \`${constraint}\``);
+    await db.query(
+      `ALTER TABLE \`${table}\` ADD CONSTRAINT \`${constraint}\` FOREIGN KEY (${colList}) REFERENCES \`${target}\` (${refList})${onDelete}${onUpdate}`
+    );
+    console.log(`Retargeted FK ${table}.${constraint} -> ${target}`);
   }
 }
 
@@ -132,11 +214,25 @@ async function ensureNewsColumns(db: PoolConnection): Promise<void> {
   }
 }
 
+async function ensureMemberColumns(db: PoolConnection): Promise<void> {
+  const alters = [
+    'ADD COLUMN `designation` VARCHAR(150) NULL AFTER `role_id`',
+  ];
+  for (const clause of alters) {
+    try {
+      await db.query(`ALTER TABLE tblMembers ${clause}`);
+    } catch (err: any) {
+      if (err?.code !== 'ER_DUP_FIELDNAME') throw err;
+    }
+  }
+}
+
 async function createAndSeed(db: PoolConnection): Promise<void> {
   for (const ddl of TABLES) {
     await db.query(ddl);
   }
   await ensureNewsColumns(db);
+  await ensureMemberColumns(db);
 
   const [[leaderCount]]: any = await db.query('SELECT COUNT(*) AS c FROM tblLeaders');
   if (Number(leaderCount.c) === 0) {

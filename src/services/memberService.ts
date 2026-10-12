@@ -30,7 +30,7 @@ const DETAIL_COLUMNS = `
   m.country_code, m.phone_number, m.email, m.profile_image, m.blood_group,
   m.aadhaar_number_encrypted, m.voter_id_encrypted,
   m.state_id, m.parliament_constituency_id, m.assembly_constituency_id, m.district_id, m.block_id, m.village_id,
-  m.address_line1, m.village_custom, m.role_id, m.status, m.created_at, m.updated_at,
+  m.address_line1, m.village_custom, m.role_id, m.designation, m.status, m.created_at, m.updated_at,
   pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta, pc.code AS parliament_code,
   ac.name_en AS assembly_name, ac.name_ta AS assembly_name_ta,
   d.name_en AS district_name, d.name_ta AS district_name_ta,
@@ -211,14 +211,16 @@ export class MemberService {
 
       const pendingMemberId = `TMP-${userId}-${Date.now()}`;
 
+      const designation = String(data.designation || data.join_as || '').trim() || null;
+
       const [memberResult]: any = await conn.query(
         `INSERT INTO tblMembers (
           user_id, member_id, full_name, father_name, date_of_birth, gender,
           country_code, phone_number, email, profile_image, blood_group,
           aadhaar_number_encrypted, voter_id_encrypted, aadhaar_hash, voter_id_hash,
           state_id, parliament_constituency_id, assembly_constituency_id,
-          district_id, block_id, village_id, address_line1, village_custom, role_id, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED')`,
+          district_id, block_id, village_id, address_line1, village_custom, role_id, designation, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED')`,
         [
           userId,
           pendingMemberId,
@@ -244,6 +246,7 @@ export class MemberService {
           data.address_line1 || null,
           data.village_custom || null,
           roleId,
+          designation,
         ]
       );
       const memberDbId = memberResult.insertId;
@@ -339,7 +342,7 @@ export class MemberService {
 
     const columns = `
       m.id, m.member_id, m.full_name, m.email, m.country_code, m.phone_number, m.blood_group, m.gender,
-      m.profile_image, m.status, m.role_id, m.created_at,
+      m.profile_image, m.status, m.role_id, m.designation, m.created_at,
       d.name_en AS district_name, d.name_ta AS district_name_ta,
       b.name_en AS block_name, b.name_ta AS block_name_ta,
       pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta, pc.code AS parliament_code,
@@ -467,9 +470,17 @@ export class MemberService {
       state_id = ?, parliament_constituency_id = ?, assembly_constituency_id = ?,
       district_id = ?, block_id = ?, village_id = ?, address_line1 = ?, village_custom = ?`;
 
+    const designation = data.designation !== undefined || data.join_as !== undefined
+      ? (String(data.designation || data.join_as || '').trim() || null)
+      : undefined;
+
     if (roleId !== null) {
       sql += ', role_id = ?';
       params.push(roleId);
+    }
+    if (designation !== undefined) {
+      sql += ', designation = ?';
+      params.push(designation);
     }
     if (profileImagePath) {
       sql += ', profile_image = ?';

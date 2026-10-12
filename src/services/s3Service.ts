@@ -26,8 +26,13 @@ export function isS3PublicFolder(folder: string): boolean {
   return (PUBLIC_FOLDERS as readonly string[]).includes(folder);
 }
 
+export function canonicalS3Folder(folder: string): string | null {
+  const norm = String(folder || '').trim().toLowerCase();
+  return (ALL_FOLDERS as readonly string[]).find((f) => f.toLowerCase() === norm) ?? null;
+}
+
 export function isS3Folder(folder: string): boolean {
-  return (ALL_FOLDERS as readonly string[]).includes(folder);
+  return canonicalS3Folder(folder) !== null;
 }
 
 function requireBucket(): string {
