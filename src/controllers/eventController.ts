@@ -1,11 +1,54 @@
 import { Request, Response, NextFunction } from 'express';
 import { EventService } from '../services/eventService';
+import { EventRsvpService } from '../services/eventRsvpService';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types';
 
 export async function listEvents(req: Request, res: Response, next: NextFunction) {
   try {
     return sendSuccess(res, 'Events list retrieved', await EventService.list(req.query, false));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function rsvpEvent(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const eventId = Number(req.params.id);
+    const status = String(req.body.status || 'GOING');
+    const rsvp = await EventRsvpService.upsert(eventId, req.user!.id, req.user!.member_db_id || null, status);
+    const counts = await EventRsvpService.counts(eventId);
+    return sendSuccess(res, 'RSVP saved', { rsvp, counts });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function checkInEvent(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const eventId = Number(req.params.id);
+    const rsvp = await EventRsvpService.checkIn(eventId, req.user!.id);
+    const counts = await EventRsvpService.counts(eventId);
+    return sendSuccess(res, 'Checked in', { rsvp, counts });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function myEventRsvp(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const eventId = Number(req.params.id);
+    const rsvp = await EventRsvpService.getMyRsvp(eventId, req.user!.id);
+    const counts = await EventRsvpService.counts(eventId);
+    return sendSuccess(res, 'RSVP status', { rsvp, counts });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listEventRsvps(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    return sendSuccess(res, 'RSVP list', await EventRsvpService.listForEvent(Number(req.params.id)));
   } catch (err) {
     next(err);
   }

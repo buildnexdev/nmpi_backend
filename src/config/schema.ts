@@ -76,6 +76,111 @@ const TABLES: string[] = [
     \`content_ta\` LONGTEXT NULL,
     \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS \`tblFeed_posts\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`user_id\` INT NOT NULL,
+    \`member_id\` INT NULL,
+    \`body\` TEXT NOT NULL,
+    \`image_url\` VARCHAR(500) NULL,
+    \`district_id\` INT NULL,
+    \`status\` ENUM('ACTIVE', 'HIDDEN', 'DELETED') NOT NULL DEFAULT 'ACTIVE',
+    \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX \`idx_feed_status_created\` (\`status\`, \`created_at\`),
+    INDEX \`idx_feed_district\` (\`district_id\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS \`tblFeed_likes\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`post_id\` INT NOT NULL,
+    \`user_id\` INT NOT NULL,
+    \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY \`uq_feed_like\` (\`post_id\`, \`user_id\`),
+    INDEX \`idx_feed_likes_post\` (\`post_id\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS \`tblReels\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`user_id\` INT NOT NULL,
+    \`title\` VARCHAR(255) NOT NULL,
+    \`caption\` TEXT NULL,
+    \`video_url\` VARCHAR(500) NOT NULL,
+    \`thumbnail_url\` VARCHAR(500) NULL,
+    \`district_id\` INT NULL,
+    \`view_count\` INT NOT NULL DEFAULT 0,
+    \`status\` ENUM('ACTIVE', 'HIDDEN', 'DELETED') NOT NULL DEFAULT 'ACTIVE',
+    \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX \`idx_reels_status_created\` (\`status\`, \`created_at\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS \`tblReel_likes\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`reel_id\` INT NOT NULL,
+    \`user_id\` INT NOT NULL,
+    \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY \`uq_reel_like\` (\`reel_id\`, \`user_id\`),
+    INDEX \`idx_reel_likes_reel\` (\`reel_id\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS \`tblEvent_rsvps\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`event_id\` INT NOT NULL,
+    \`user_id\` INT NOT NULL,
+    \`member_id\` INT NULL,
+    \`status\` ENUM('GOING', 'INTERESTED', 'NOT_GOING') NOT NULL DEFAULT 'GOING',
+    \`checked_in\` TINYINT(1) NOT NULL DEFAULT 0,
+    \`checked_in_at\` DATETIME NULL,
+    \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY \`uq_event_rsvp\` (\`event_id\`, \`user_id\`),
+    INDEX \`idx_event_rsvp_event\` (\`event_id\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS \`tblSurveys\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`title\` VARCHAR(255) NOT NULL,
+    \`description\` TEXT NULL,
+    \`status\` ENUM('DRAFT', 'OPEN', 'CLOSED') NOT NULL DEFAULT 'OPEN',
+    \`district_id\` INT NULL,
+    \`created_by\` INT NULL,
+    \`starts_at\` DATETIME NULL,
+    \`ends_at\` DATETIME NULL,
+    \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX \`idx_surveys_status\` (\`status\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS \`tblSurvey_questions\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`survey_id\` INT NOT NULL,
+    \`question_text\` VARCHAR(500) NOT NULL,
+    \`question_type\` ENUM('SINGLE', 'MULTI', 'TEXT') NOT NULL DEFAULT 'SINGLE',
+    \`display_order\` INT NOT NULL DEFAULT 0,
+    \`is_required\` TINYINT(1) NOT NULL DEFAULT 1,
+    INDEX \`idx_survey_questions_survey\` (\`survey_id\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS \`tblSurvey_options\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`question_id\` INT NOT NULL,
+    \`option_text\` VARCHAR(255) NOT NULL,
+    \`display_order\` INT NOT NULL DEFAULT 0,
+    INDEX \`idx_survey_options_question\` (\`question_id\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS \`tblSurvey_answers\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`survey_id\` INT NOT NULL,
+    \`question_id\` INT NOT NULL,
+    \`user_id\` INT NOT NULL,
+    \`option_id\` INT NULL,
+    \`text_answer\` TEXT NULL,
+    \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX \`idx_survey_answers_user\` (\`survey_id\`, \`user_id\`),
+    INDEX \`idx_survey_answers_question\` (\`question_id\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
 const SEED_LEADERS = [
@@ -272,5 +377,54 @@ async function createAndSeed(db: PoolConnection): Promise<void> {
         [p.key, p.title, p.title_ta, p.content, p.content_ta]
       );
     }
+  }
+
+  await seedCommunityDefaults(db);
+}
+
+async function seedCommunityDefaults(db: PoolConnection): Promise<void> {
+  const [surveyCount]: any = await db.query('SELECT COUNT(*) AS c FROM tblSurveys');
+  if (Number(surveyCount[0]?.c) > 0) return;
+
+  const [sRes]: any = await db.query(
+    `INSERT INTO tblSurveys (title, description, status) VALUES (?, ?, 'OPEN')`,
+    [
+      'NMPI Member Pulse',
+      'Help shape our next programmes — share what matters most in your area.',
+    ]
+  );
+  const surveyId = sRes.insertId;
+
+  const [q1]: any = await db.query(
+    `INSERT INTO tblSurvey_questions (survey_id, question_text, question_type, display_order, is_required)
+     VALUES (?, ?, 'SINGLE', 0, 1)`,
+    [surveyId, 'Which focus should NMPI prioritise this month?']
+  );
+  const opts1 = ['Community welfare camps', 'Youth leadership training', 'Legal awareness drives', 'Membership growth'];
+  for (let i = 0; i < opts1.length; i++) {
+    await db.query(
+      `INSERT INTO tblSurvey_options (question_id, option_text, display_order) VALUES (?, ?, ?)`,
+      [q1.insertId, opts1[i], i]
+    );
+  }
+
+  const [q2]: any = await db.query(
+    `INSERT INTO tblSurvey_questions (survey_id, question_text, question_type, display_order, is_required)
+     VALUES (?, ?, 'TEXT', 1, 0)`,
+    [surveyId, 'Any suggestion for your district? (optional)']
+  );
+  void q2;
+
+  const [reelCount]: any = await db.query('SELECT COUNT(*) AS c FROM tblReels');
+  if (Number(reelCount[0]?.c) === 0) {
+    await db.query(
+      `INSERT INTO tblReels (user_id, title, caption, video_url, thumbnail_url, status)
+       VALUES (1, ?, ?, ?, NULL, 'ACTIVE')`,
+      [
+        'Welcome to NMPI',
+        'Short introduction to Netaji Makkal Pathukappu Iyakkam.',
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      ]
+    ).catch(() => {});
   }
 }
