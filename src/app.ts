@@ -18,6 +18,7 @@ import uploadRoutes from './routes/uploadRoutes';
 import feedRoutes from './routes/feedRoutes';
 import reelRoutes from './routes/reelRoutes';
 import surveyRoutes from './routes/surveyRoutes';
+import requestRoutes from './routes/requestRoutes';
 
 import { errorHandler } from './middleware/errorHandler';
 import { serveUpload } from './middleware/uploadsServe';
@@ -83,6 +84,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/reels', reelRoutes);
 app.use('/api/surveys', surveyRoutes);
+app.use('/api/requests', requestRoutes);
 app.use('/api/verify', verifyRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/access', accessRoutes);

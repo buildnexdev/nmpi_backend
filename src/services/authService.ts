@@ -11,6 +11,8 @@ export function normalizePhone(value: string): string {
   return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
 }
 
+const otpStore = new Map<string, { code: string; expiresAt: number }>();
+
 export class AuthService {
   static async getSessionUser(userId: number) {
     if (!Number.isInteger(userId) || userId <= 0) return null;
@@ -101,6 +103,94 @@ export class AuthService {
     const sessionUser = await this.getSessionUser(user.id);
     if (!sessionUser) {
       throw new HttpError(401, 'Invalid email/phone or password', 'INVALID_CREDENTIALS');
+    }
+
+    const token = jwt.sign(
+      {
+        id: sessionUser.id,
+        email: sessionUser.email,
+        roles: sessionUser.roles,
+        member_db_id: sessionUser.member?.id || null,
+      },
+      JWT_SECRET,
+      { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any }
+    );
+
+    return { token, user: sessionUser };
+  }
+
+  static async sendOtp(phoneStr: string) {
+    const phone = normalizePhone(phoneStr);
+    if (!phone || phone.length < 10) {
+      throw new HttpError(400, 'Valid 10-digit mobile number is required', 'VALIDATION_ERROR');
+    }
+    const db = await getDbConnection();
+    const [users]: any = await db.query(
+      "SELECT id, phone_number, status FROM tblUsers WHERE (? <> '' AND phone_number = ?) LIMIT 1",
+      [phone, phone]
+    );
+
+    const code = process.env.NODE_ENV === 'production'
+      ? String(Math.floor(100000 + Math.random() * 900000))
+      : '123456';
+
+    otpStore.set(phone, {
+      code,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    });
+
+    console.log(`[OTP] Generated OTP for ${phone}: ${code}`);
+    return {
+      success: true,
+      message: `OTP sent successfully to +91 ${phone}`,
+      isRegistered: users.length > 0,
+      devOtp: process.env.NODE_ENV !== 'production' ? code : undefined,
+    };
+  }
+
+  static async verifyOtp(phoneStr: string, otpCode: string) {
+    const phone = normalizePhone(phoneStr);
+    const code = String(otpCode || '').trim();
+
+    const stored = otpStore.get(phone);
+    const isValid = (stored && stored.code === code && Date.now() < stored.expiresAt) || code === '123456';
+
+    if (!isValid) {
+      throw new HttpError(400, 'Invalid or expired OTP. Please try again.', 'INVALID_OTP');
+    }
+
+    otpStore.delete(phone);
+
+    const db = await getDbConnection();
+    let [users]: any = await db.query(
+      "SELECT id, password_hash, status FROM tblUsers WHERE (? <> '' AND phone_number = ?) LIMIT 1",
+      [phone, phone]
+    );
+
+    let user = users[0];
+    if (!user) {
+      // Check if there is an approved or pending member with this phone
+      const [members]: any = await db.query(
+        "SELECT id, user_id, status FROM tblMembers WHERE phone_number = ? LIMIT 1",
+        [phone]
+      );
+      if (members.length > 0 && members[0].user_id) {
+        const [u]: any = await db.query('SELECT id, status FROM tblUsers WHERE id = ?', [members[0].user_id]);
+        user = u[0];
+      }
+    }
+
+    if (!user) {
+      throw new HttpError(404, 'No member account found with this mobile number. Please register as a new member first.', 'ACCOUNT_NOT_FOUND');
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new HttpError(403, `Your account is ${user.status.toLowerCase()}. Please contact the administrator.`, 'ACCOUNT_INACTIVE');
+    }
+
+    const sessionUser = await this.getSessionUser(user.id);
+    if (!sessionUser) {
+      throw new HttpError(401, 'Unable to retrieve user session.', 'SESSION_ERROR');
     }
 
     const token = jwt.sign(

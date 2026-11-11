@@ -9,6 +9,15 @@ const loginSchema = yup.object({
   password: yup.string().required('Password is required'),
 });
 
+const sendOtpSchema = yup.object({
+  mobile: yup.string().trim().min(10, 'Valid 10-digit mobile number required').required('Mobile number is required'),
+});
+
+const verifyOtpSchema = yup.object({
+  mobile: yup.string().trim().min(10, 'Valid 10-digit mobile number required').required('Mobile number is required'),
+  otp: yup.string().trim().min(4, 'OTP code required').required('OTP is required'),
+});
+
 const changePasswordSchema = yup.object({
   current_password: yup.string().required('Current password is required'),
   new_password: yup.string().min(8, 'New password must be at least 8 characters').required('New password is required'),
@@ -19,6 +28,26 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     const { login, password } = await loginSchema.validate(req.body, { abortEarly: true });
     const result = await AuthService.login(login, password);
     return sendSuccess(res, 'Login successful', result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function sendOtp(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { mobile } = await sendOtpSchema.validate(req.body, { abortEarly: true });
+    const result = await AuthService.sendOtp(mobile);
+    return sendSuccess(res, result.message, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function verifyOtp(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { mobile, otp } = await verifyOtpSchema.validate(req.body, { abortEarly: true });
+    const result = await AuthService.verifyOtp(mobile, otp);
+    return sendSuccess(res, 'OTP verified successfully', result);
   } catch (err) {
     next(err);
   }

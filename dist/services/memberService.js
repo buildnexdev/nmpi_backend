@@ -15,6 +15,9 @@ const uploadStorage_1 = require("../utils/uploadStorage");
 const authService_1 = require("./authService");
 const types_1 = require("../types");
 const constants_1 = require("../constants");
+const emailService_1 = require("./emailService");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const authMiddleware_1 = require("../middleware/authMiddleware");
 const DETAIL_JOINS = `
   LEFT JOIN tblParliament_constituencies pc ON m.parliament_constituency_id = pc.id
   LEFT JOIN tblAssembly_constituencies ac ON m.assembly_constituency_id = ac.id
@@ -29,7 +32,7 @@ const DETAIL_COLUMNS = `
   m.country_code, m.phone_number, m.email, m.profile_image, m.blood_group,
   m.aadhaar_number_encrypted, m.voter_id_encrypted,
   m.state_id, m.parliament_constituency_id, m.assembly_constituency_id, m.district_id, m.block_id, m.village_id,
-  m.address_line1, m.village_custom, m.role_id, m.status, m.created_at, m.updated_at,
+  m.address_line1, m.village_custom, m.role_id, m.designation, m.status, m.created_at, m.updated_at,
   pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta, pc.code AS parliament_code,
   ac.name_en AS assembly_name, ac.name_ta AS assembly_name_ta,
   d.name_en AS district_name, d.name_ta AS district_name_ta,
@@ -110,6 +113,50 @@ class MemberService {
             (0, security_1.hashSensitiveData)(voterId.replace(/\s+/g, '').toUpperCase()),
         ]);
         return rows.length > 0;
+    }
+    static async lookupByPhone(phoneNumber, countryCode = '+91') {
+        const db = await (0, database_1.getDbConnection)();
+        const cleanPhone = (0, authService_1.normalizePhone)(phoneNumber);
+        if (!cleanPhone || cleanPhone.length < 10) {
+            throw new types_1.HttpError(400, 'Please enter a valid 10-digit mobile number', 'VALIDATION_ERROR', { field: 'phone_number' });
+        }
+        const cleanCountry = (countryCode || '+91').trim();
+        const [rows] = await db.query(`SELECT ${DETAIL_COLUMNS} FROM tblMembers m ${DETAIL_JOINS} WHERE m.phone_number = ? OR (m.country_code = ? AND m.phone_number = ?) ORDER BY m.id DESC LIMIT 1`, [cleanPhone, cleanCountry, cleanPhone]);
+        const raw = rows[0];
+        if (!raw) {
+            throw new types_1.HttpError(404, 'No registered member found with this mobile number. Please check the number or register as a new member.', 'NOT_FOUND');
+        }
+        const detail = toSafeDetail(raw);
+        const qr_data_url = detail.verification_token ? await (0, qrCodeGenerator_1.generateMemberQrDataUrl)(detail.verification_token) : null;
+        const id_card_token = jsonwebtoken_1.default.sign({ purpose: 'id-card-download', member_db_id: raw.id }, authMiddleware_1.JWT_SECRET, { expiresIn: '1h' });
+        const member = { ...detail, qr_data_url, id_card_token };
+        const [userRows] = await db.query('SELECT email, status FROM tblUsers WHERE id = ?', [raw.user_id]);
+        const userRow = userRows[0];
+        const [roleRows] = await db.query('SELECT r.name FROM tblUser_roles ur JOIN tblRoles r ON ur.role_id = r.id WHERE ur.user_id = ?', [raw.user_id]);
+        const roles = roleRows.length > 0 ? roleRows.map((r) => r.name) : ['MEMBER'];
+        const token = jsonwebtoken_1.default.sign({
+            id: raw.user_id,
+            email: raw.email || userRow?.email,
+            phone_number: raw.phone_number,
+            roles,
+            member_db_id: raw.id,
+        }, authMiddleware_1.JWT_SECRET, { expiresIn: '7d' });
+        const user = {
+            id: raw.user_id,
+            email: raw.email || userRow?.email,
+            phone_number: raw.phone_number,
+            roles,
+            role_names: roles,
+            member: {
+                id: raw.id,
+                member_id: raw.member_id,
+                full_name: raw.full_name,
+                profile_image: raw.profile_image,
+                status: raw.status,
+                role_name: raw.role_name,
+            },
+        };
+        return { token, user, member };
     }
     static validateRegistration(data) {
         const required = [
@@ -194,13 +241,14 @@ class MemberService {
             // System access is always "Member"; coordinator/admin access is granted by an administrator.
             await conn.query('INSERT INTO tblUser_roles (user_id, role_id) VALUES (?, ?)', [userId, constants_1.ROLE_IDS.MEMBER]);
             const pendingMemberId = `TMP-${userId}-${Date.now()}`;
+            const designation = String(data.designation || data.join_as || '').trim() || null;
             const [memberResult] = await conn.query(`INSERT INTO tblMembers (
           user_id, member_id, full_name, father_name, date_of_birth, gender,
           country_code, phone_number, email, profile_image, blood_group,
           aadhaar_number_encrypted, voter_id_encrypted, aadhaar_hash, voter_id_hash,
           state_id, parliament_constituency_id, assembly_constituency_id,
-          district_id, block_id, village_id, address_line1, village_custom, role_id, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED')`, [
+          district_id, block_id, village_id, address_line1, village_custom, role_id, designation, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED')`, [
                 userId,
                 pendingMemberId,
                 String(data.full_name).trim(),
@@ -225,6 +273,7 @@ class MemberService {
                 data.address_line1 || null,
                 data.village_custom || null,
                 roleId,
+                designation,
             ]);
             const memberDbId = memberResult.insertId;
             const memberIdCode = (0, generateMemberId_1.generateMemberId)(memberDbId, parliamentCode);
@@ -234,6 +283,10 @@ class MemberService {
             await conn.commit();
             const detail = await this.getMemberById(memberDbId, null);
             const qr_data_url = await (0, qrCodeGenerator_1.generateMemberQrDataUrl)(verificationToken);
+            // Notify official email about the new enrollment
+            (0, emailService_1.sendNewMemberEnrollmentEmail)(detail).catch((err) => {
+                console.error('Email notification dispatch error:', err);
+            });
             return { ...detail, verification_token: verificationToken, qr_data_url };
         }
         catch (err) {
@@ -306,7 +359,7 @@ class MemberService {
       ${where}`;
         const columns = `
       m.id, m.member_id, m.full_name, m.email, m.country_code, m.phone_number, m.blood_group, m.gender,
-      m.profile_image, m.status, m.role_id, m.created_at,
+      m.profile_image, m.status, m.role_id, m.designation, m.created_at,
       d.name_en AS district_name, d.name_ta AS district_name_ta,
       b.name_en AS block_name, b.name_ta AS block_name_ta,
       pc.name_en AS parliament_name, pc.name_ta AS parliament_name_ta, pc.code AS parliament_code,
@@ -425,9 +478,16 @@ class MemberService {
       full_name = ?, father_name = ?, date_of_birth = ?, gender = ?, blood_group = ?,
       state_id = ?, parliament_constituency_id = ?, assembly_constituency_id = ?,
       district_id = ?, block_id = ?, village_id = ?, address_line1 = ?, village_custom = ?`;
+        const designation = data.designation !== undefined || data.join_as !== undefined
+            ? (String(data.designation || data.join_as || '').trim() || null)
+            : undefined;
         if (roleId !== null) {
             sql += ', role_id = ?';
             params.push(roleId);
+        }
+        if (designation !== undefined) {
+            sql += ', designation = ?';
+            params.push(designation);
         }
         if (profileImagePath) {
             sql += ', profile_image = ?';

@@ -67,8 +67,8 @@ exports.getVillages = listHandler('Villages retrieved successfully', (req) => {
     };
 });
 exports.getRoles = listHandler('Roles retrieved successfully', () => ({
-    sql: `SELECT id, name, description FROM tblRoles WHERE id IN (?) ORDER BY id ASC`,
-    params: [constants_1.SELF_SELECTABLE_ROLE_IDS],
+    sql: `SELECT id, name, description FROM tblRoles WHERE id IN (?, ?) ORDER BY id ASC`,
+    params: [...constants_1.SELF_SELECTABLE_ROLE_IDS],
 }));
 exports.getAllRoles = listHandler('Roles retrieved successfully', () => ({
     sql: `SELECT id, name, description FROM tblRoles ORDER BY id ASC`,

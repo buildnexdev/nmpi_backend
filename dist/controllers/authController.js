@@ -34,6 +34,8 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.login = login;
+exports.sendOtp = sendOtp;
+exports.verifyOtp = verifyOtp;
 exports.getMe = getMe;
 exports.changePassword = changePassword;
 const yup = __importStar(require("yup"));
@@ -42,6 +44,13 @@ const response_1 = require("../utils/response");
 const loginSchema = yup.object({
     login: yup.string().trim().required('Email or phone number is required'),
     password: yup.string().required('Password is required'),
+});
+const sendOtpSchema = yup.object({
+    mobile: yup.string().trim().min(10, 'Valid 10-digit mobile number required').required('Mobile number is required'),
+});
+const verifyOtpSchema = yup.object({
+    mobile: yup.string().trim().min(10, 'Valid 10-digit mobile number required').required('Mobile number is required'),
+    otp: yup.string().trim().min(4, 'OTP code required').required('OTP is required'),
 });
 const changePasswordSchema = yup.object({
     current_password: yup.string().required('Current password is required'),
@@ -52,6 +61,26 @@ async function login(req, res, next) {
         const { login, password } = await loginSchema.validate(req.body, { abortEarly: true });
         const result = await authService_1.AuthService.login(login, password);
         return (0, response_1.sendSuccess)(res, 'Login successful', result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+async function sendOtp(req, res, next) {
+    try {
+        const { mobile } = await sendOtpSchema.validate(req.body, { abortEarly: true });
+        const result = await authService_1.AuthService.sendOtp(mobile);
+        return (0, response_1.sendSuccess)(res, result.message, result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+async function verifyOtp(req, res, next) {
+    try {
+        const { mobile, otp } = await verifyOtpSchema.validate(req.body, { abortEarly: true });
+        const result = await authService_1.AuthService.verifyOtp(mobile, otp);
+        return (0, response_1.sendSuccess)(res, 'OTP verified successfully', result);
     }
     catch (err) {
         next(err);

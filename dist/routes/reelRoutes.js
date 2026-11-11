@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const reelController_1 = require("../controllers/reelController");
+const authMiddleware_1 = require("../middleware/authMiddleware");
+const rbacMiddleware_1 = require("../middleware/rbacMiddleware");
+const constants_1 = require("../constants");
+const router = (0, express_1.Router)();
+const admins = [authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)(constants_1.CONTENT_ADMIN_ROLES)];
+router.get('/', authMiddleware_1.authenticateJWT, reelController_1.listReels);
+router.post('/', ...admins, reelController_1.createReel);
+router.post('/:id/view', authMiddleware_1.authenticateJWT, reelController_1.viewReel);
+router.post('/:id/like', authMiddleware_1.authenticateJWT, reelController_1.toggleReelLike);
+router.delete('/:id', ...admins, reelController_1.deleteReel);
+exports.default = router;

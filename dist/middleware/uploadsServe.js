@@ -1,33 +1,48 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.serveUpload = serveUpload;
+const path_1 = __importDefault(require("path"));
 const s3Service_1 = require("../services/s3Service");
+const MIME_MAP = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+    '.mp4': 'video/mp4',
+    '.mov': 'video/quicktime',
+    '.webm': 'video/webm',
+    '.pdf': 'application/pdf',
+};
 async function serveUpload(req, res, next) {
     if (!(0, s3Service_1.isS3Enabled)())
         return next();
     const folder = String(req.params.folder || '');
     const filename = String(req.params.filename || '');
-    if (!(0, s3Service_1.isS3Folder)(folder) || !filename || filename.includes('..') || filename.includes('/')) {
+    const canonical = (0, s3Service_1.canonicalS3Folder)(folder);
+    if (!canonical || !filename || filename.includes('..') || filename.includes('/')) {
         return next();
     }
     try {
-        const obj = await (0, s3Service_1.getS3Object)(`${folder}/${filename}`);
-        res.setHeader('Content-Type', obj.contentType);
+        const key = `${canonical}/${filename}`;
+        const buffer = await (0, s3Service_1.getS3ObjectBuffer)(key);
+        if (!buffer) {
+            console.warn(`[serveUpload] Object not found in S3: ${key}`);
+            return next();
+        }
+        const ext = path_1.default.extname(filename).toLowerCase();
+        const contentType = MIME_MAP[ext] || 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=86400');
-        if (obj.contentLength)
-            res.setHeader('Content-Length', String(obj.contentLength));
-        if (typeof obj.body.pipe === 'function') {
-            obj.body.on('error', next);
-            obj.body.pipe(res);
-            return;
-        }
-        const chunks = [];
-        for await (const chunk of obj.body) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
-        res.send(Buffer.concat(chunks));
+        res.setHeader('Content-Length', String(buffer.length));
+        return res.end(buffer);
     }
-    catch {
+    catch (err) {
+        console.error(`[serveUpload] Error serving ${canonical}/${filename}:`, err?.name, err?.message);
         next();
     }
 }

@@ -31,3 +31,23 @@ export function authenticateJWT(req: AuthRequest, res: Response, next: NextFunct
     return sendError(res, 'Invalid authorization token', ERROR_CODES.INVALID_TOKEN, HTTP_STATUS.UNAUTHORIZED);
   }
 }
+
+export function optionalAuthenticateJWT(req: AuthRequest, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    req.user = {
+      id: decoded.id,
+      email: decoded.email,
+      roles: decoded.roles || [],
+      member_db_id: decoded.member_db_id || null,
+    };
+  } catch (e) {
+    // Ignore invalid/expired token for optional endpoints
+  }
+  next();
+}

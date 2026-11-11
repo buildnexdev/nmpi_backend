@@ -10,10 +10,17 @@ const authMiddleware_1 = require("../middleware/authMiddleware");
 const router = (0, express_1.Router)();
 const loginLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
-    max: 20,
+    max: 30,
     message: { success: false, message: 'Too many login attempts. Please try again in 15 minutes.', data: null },
 });
+const otpLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { success: false, message: 'Too many OTP attempts. Please try again later.', data: null },
+});
 router.post('/login', loginLimiter, authController_1.login);
+router.post('/otp/send', otpLimiter, authController_1.sendOtp);
+router.post('/otp/verify', otpLimiter, authController_1.verifyOtp);
 router.get('/me', authMiddleware_1.authenticateJWT, authController_1.getMe);
 router.post('/change-password', authMiddleware_1.authenticateJWT, authController_1.changePassword);
 exports.default = router;

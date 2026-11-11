@@ -13,6 +13,7 @@ router.get('/check-phone', memberController_1.checkPhone);
 router.get('/check-email', memberController_1.checkEmail);
 router.get('/check-aadhaar', memberController_1.checkAadhaar);
 router.get('/check-voter-id', memberController_1.checkVoterId);
+router.post('/lookup-by-phone', memberController_1.lookupMemberByPhone);
 router.post('/register', (req, res, next) => {
     uploadMiddleware_1.uploadProfileImage.single('profile_image')(req, res, (err) => {
         if (err)

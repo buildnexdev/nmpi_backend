@@ -23,8 +23,43 @@ class CmsService {
     }
     static async listLeaders(includeInactive) {
         const db = await (0, database_1.getDbConnection)();
-        const [rows] = await db.query(`SELECT * FROM tblLeaders ${includeInactive ? '' : "WHERE status = 'ACTIVE'"} ORDER BY display_order ASC, id ASC`);
-        return rows;
+        const [leaders] = await db.query(`SELECT *, 0 AS is_live_member FROM tblLeaders ${includeInactive ? '' : "WHERE status = 'ACTIVE'"} ORDER BY display_order ASC, id ASC`);
+        try {
+            const [members] = await db.query(`
+        SELECT 
+          (100000 + m.id) AS id,
+          m.id AS member_pk,
+          m.member_id,
+          m.full_name AS name,
+          m.full_name AS name_ta,
+          COALESCE(NULLIF(TRIM(m.designation), ''), r.name, 'Member') AS designation,
+          COALESCE(NULLIF(TRIM(m.designation), ''), r.name, 'உறுப்பினர்') AS designation_ta,
+          COALESCE(d.name_en, '') AS district,
+          COALESCE(d.name_ta, d.name_en, '') AS district_ta,
+          NULL AS qualification,
+          m.profile_image AS photo_url,
+          m.phone_number AS phone,
+          m.email,
+          NULL AS bio,
+          999 AS display_order,
+          ${includeInactive ? 'm.status' : "'ACTIVE'"} AS status,
+          1 AS is_live_member
+        FROM tblMembers m
+        LEFT JOIN tblDistricts d ON m.district_id = d.id
+        LEFT JOIN tblRoles r ON m.role_id = r.id
+        WHERE ${includeInactive ? "m.status IN ('APPROVED', 'PENDING')" : "m.status = 'APPROVED'"}
+          AND (
+            (m.designation IS NOT NULL AND TRIM(m.designation) != '' AND LOWER(TRIM(m.designation)) NOT IN ('member', 'உறுப்பினர்'))
+            OR m.role_id IN (3, 4, 5, 6, 7)
+          )
+        ORDER BY m.id DESC
+      `);
+            return [...leaders, ...members];
+        }
+        catch (err) {
+            console.warn('Could not query members for leadership list:', err);
+            return leaders;
+        }
     }
     static async getLeader(id) {
         const db = await (0, database_1.getDbConnection)();

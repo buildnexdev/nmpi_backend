@@ -7,6 +7,7 @@ exports.checkPhone = checkPhone;
 exports.checkEmail = checkEmail;
 exports.checkAadhaar = checkAadhaar;
 exports.checkVoterId = checkVoterId;
+exports.lookupMemberByPhone = lookupMemberByPhone;
 exports.registerMember = registerMember;
 exports.downloadIdCardWithToken = downloadIdCardWithToken;
 exports.downloadMyIdCard = downloadMyIdCard;
@@ -84,6 +85,20 @@ async function checkVoterId(req, res, next) {
             return;
         const exists = await memberService_1.MemberService.checkVoterId(voterId);
         return (0, response_1.sendSuccess)(res, exists ? 'Voter ID is already registered' : 'Voter ID is available', { exists });
+    }
+    catch (err) {
+        next(err);
+    }
+}
+async function lookupMemberByPhone(req, res, next) {
+    try {
+        const phoneNumber = String(req.body.phone_number || req.body.phone || req.query.phone || '').trim();
+        const countryCode = String(req.body.country_code || req.query.countryCode || '+91').trim();
+        if (!phoneNumber) {
+            return (0, response_1.sendError)(res, 'Phone number is required', 'VALIDATION_ERROR', 400);
+        }
+        const result = await memberService_1.MemberService.lookupByPhone(phoneNumber, countryCode);
+        return (0, response_1.sendSuccess)(res, 'Member identified successfully', result);
     }
     catch (err) {
         next(err);
@@ -174,7 +189,8 @@ async function getMyProfile(req, res, next) {
 async function updateMyProfile(req, res, next) {
     try {
         const profile = await memberService_1.MemberService.updateMyProfile(req.user.id, req.body, req.file);
-        return (0, response_1.sendSuccess)(res, 'Profile updated successfully', profile);
+        const id_card_token = profile ? jsonwebtoken_1.default.sign({ purpose: ID_CARD_TOKEN_PURPOSE, member_db_id: profile.id }, authMiddleware_1.JWT_SECRET, { expiresIn: '1h' }) : undefined;
+        return (0, response_1.sendSuccess)(res, 'Profile updated successfully', { ...profile, id_card_token });
     }
     catch (err) {
         next(err);

@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const surveyController_1 = require("../controllers/surveyController");
+const authMiddleware_1 = require("../middleware/authMiddleware");
+const rbacMiddleware_1 = require("../middleware/rbacMiddleware");
+const constants_1 = require("../constants");
+const router = (0, express_1.Router)();
+const admins = [authMiddleware_1.authenticateJWT, (0, rbacMiddleware_1.requireRoles)(constants_1.CONTENT_ADMIN_ROLES)];
+router.get('/', authMiddleware_1.authenticateJWT, surveyController_1.listSurveys);
+router.get('/:id', authMiddleware_1.authenticateJWT, surveyController_1.getSurvey);
+router.post('/', ...admins, surveyController_1.createSurvey);
+router.post('/:id/submit', authMiddleware_1.authenticateJWT, surveyController_1.submitSurvey);
+router.patch('/:id/status', ...admins, surveyController_1.updateSurveyStatus);
+exports.default = router;

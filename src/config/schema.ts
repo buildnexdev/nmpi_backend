@@ -181,6 +181,30 @@ const TABLES: string[] = [
     INDEX \`idx_survey_answers_user\` (\`survey_id\`, \`user_id\`),
     INDEX \`idx_survey_answers_question\` (\`question_id\`)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS \`tblPublic_requests\` (
+    \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+    \`ref_no\` VARCHAR(50) NOT NULL UNIQUE,
+    \`user_id\` INT NULL,
+    \`name\` VARCHAR(150) NOT NULL,
+    \`mobile\` VARCHAR(20) NOT NULL,
+    \`district_id\` INT NULL,
+    \`district_name\` VARCHAR(100) NULL,
+    \`category\` VARCHAR(100) NOT NULL,
+    \`description\` TEXT NOT NULL,
+    \`attachment_url\` VARCHAR(500) NULL,
+    \`status\` ENUM('SUBMITTED', 'RECEIVED', 'UNDER_REVIEW', 'ACTION_TAKEN', 'CLOSED') NOT NULL DEFAULT 'SUBMITTED',
+    \`status_notes\` TEXT NULL,
+    \`submitted_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`received_at\` DATETIME NULL,
+    \`under_review_at\` DATETIME NULL,
+    \`action_taken_at\` DATETIME NULL,
+    \`closed_at\` DATETIME NULL,
+    \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`updated_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX \`idx_pub_req_ref\` (\`ref_no\`),
+    INDEX \`idx_pub_req_mobile\` (\`mobile\`),
+    INDEX \`idx_pub_req_status\` (\`status\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
 const SEED_LEADERS = [

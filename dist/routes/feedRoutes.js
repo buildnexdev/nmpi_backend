@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const feedController_1 = require("../controllers/feedController");
+const authMiddleware_1 = require("../middleware/authMiddleware");
+const router = (0, express_1.Router)();
+router.get('/', authMiddleware_1.authenticateJWT, feedController_1.listFeed);
+router.post('/', authMiddleware_1.authenticateJWT, feedController_1.createPost);
+router.post('/:id/like', authMiddleware_1.authenticateJWT, feedController_1.toggleLike);
+router.delete('/:id', authMiddleware_1.authenticateJWT, feedController_1.deletePost);
+exports.default = router;

@@ -3,12 +3,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.S3_PUBLIC_FOLDERS = void 0;
 exports.isS3Enabled = isS3Enabled;
 exports.isS3PublicFolder = isS3PublicFolder;
+exports.canonicalS3Folder = canonicalS3Folder;
 exports.isS3Folder = isS3Folder;
 exports.uploadToS3 = uploadToS3;
 exports.deleteFromS3 = deleteFromS3;
 exports.getS3Object = getS3Object;
 exports.getS3ObjectBuffer = getS3ObjectBuffer;
 exports.getS3MediaUrl = getS3MediaUrl;
+exports.testS3Get = testS3Get;
 exports.s3ObjectExists = s3ObjectExists;
 exports.listS3Folder = listS3Folder;
 const client_s3_1 = require("@aws-sdk/client-s3");
@@ -25,8 +27,12 @@ function isS3Enabled() {
 function isS3PublicFolder(folder) {
     return PUBLIC_FOLDERS.includes(folder);
 }
+function canonicalS3Folder(folder) {
+    const norm = String(folder || '').trim().toLowerCase();
+    return ALL_FOLDERS.find((f) => f.toLowerCase() === norm) ?? null;
+}
 function isS3Folder(folder) {
-    return ALL_FOLDERS.includes(folder);
+    return canonicalS3Folder(folder) !== null;
 }
 function requireBucket() {
     const bucket = env('AWS_S3_BUCKET');
@@ -85,12 +91,26 @@ async function getS3ObjectBuffer(key) {
         const bytes = await obj.Body.transformToByteArray();
         return Buffer.from(bytes);
     }
-    catch {
+    catch (err) {
+        console.error(`[getS3ObjectBuffer] Failed for key "${key}":`, err?.name, err?.message);
         return null;
     }
 }
 async function getS3MediaUrl(key, expiresIn = 3600) {
     return (0, s3_request_presigner_1.getSignedUrl)(getClient(), new client_s3_1.GetObjectCommand({ Bucket: requireBucket(), Key: key }), { expiresIn });
+}
+async function testS3Get(key) {
+    try {
+        const obj = await getClient().send(new client_s3_1.GetObjectCommand({
+            Bucket: requireBucket(),
+            Key: key,
+        }));
+        const bytes = await obj.Body?.transformToByteArray();
+        return { success: true, length: bytes?.length };
+    }
+    catch (err) {
+        return { success: false, error: `${err?.name}: ${err?.message} (HTTP ${err?.$metadata?.httpStatusCode})` };
+    }
 }
 async function s3ObjectExists(key) {
     try {
@@ -100,7 +120,8 @@ async function s3ObjectExists(key) {
         }));
         return true;
     }
-    catch {
+    catch (err) {
+        console.error(`[s3ObjectExists] Failed for key "${key}":`, err?.name, err?.message);
         return false;
     }
 }

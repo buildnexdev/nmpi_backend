@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.JWT_SECRET = void 0;
 exports.authenticateJWT = authenticateJWT;
+exports.optionalAuthenticateJWT = optionalAuthenticateJWT;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const response_1 = require("../utils/response");
 const constants_1 = require("../constants");
@@ -31,4 +32,24 @@ function authenticateJWT(req, res, next) {
         }
         return (0, response_1.sendError)(res, 'Invalid authorization token', constants_1.ERROR_CODES.INVALID_TOKEN, constants_1.HTTP_STATUS.UNAUTHORIZED);
     }
+}
+function optionalAuthenticateJWT(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return next();
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = jsonwebtoken_1.default.verify(token, exports.JWT_SECRET);
+        req.user = {
+            id: decoded.id,
+            email: decoded.email,
+            roles: decoded.roles || [],
+            member_db_id: decoded.member_db_id || null,
+        };
+    }
+    catch (e) {
+        // Ignore invalid/expired token for optional endpoints
+    }
+    next();
 }

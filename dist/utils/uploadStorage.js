@@ -35,18 +35,18 @@ async function storeUpload(folder, filename, buffer, contentType) {
     if ((0, s3Service_1.isS3Enabled)()) {
         try {
             await (0, s3Service_1.uploadToS3)(`${folder}/${filename}`, buffer, contentType || 'application/octet-stream');
-            return publicUploadPath(folder, filename);
+            console.log(`[storeUpload] S3 upload successful for ${folder}/${filename}`);
         }
         catch (err) {
-            console.error('S3 upload failed, saving on disk instead:', err?.name, err?.message);
-            try {
-                writeLocal(folder, filename, buffer);
-                return publicUploadPath(folder, filename);
-            }
-            catch (diskErr) {
-                throw new types_1.HttpError(503, `Could not save the photo (${err?.name || err?.Code || 'S3_ERROR'}: ${err?.message || 'upload failed'}; disk: ${diskErr?.message || 'failed'}).`, 'UPLOAD_ERROR');
-            }
+            console.error('[storeUpload] CRITICAL: S3 upload failed:', err?.name, err?.message);
+            throw new types_1.HttpError(500, `Cloud storage upload failed (${err?.name || 'S3_ERROR'}: ${err?.message || 'Failed to upload'}). Photo cannot be stored permanently.`, 'STORAGE_ERROR');
         }
+        // Also write local copy if disk permits (for fast local read/cache)
+        try {
+            writeLocal(folder, filename, buffer);
+        }
+        catch { }
+        return publicUploadPath(folder, filename);
     }
     try {
         writeLocal(folder, filename, buffer);

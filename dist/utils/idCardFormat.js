@@ -29,12 +29,20 @@ function formatIdCardPhone(countryCode, phone) {
 }
 function formatIdCardBloodGroup(value) {
     const v = String(value || '').trim();
-    if (!v || v.toLowerCase() === 'unknown')
+    if (!v)
         return '—';
+    if (v.toLowerCase() === 'unknown')
+        return 'Unknown';
     return v;
 }
-/** Role / position line on the card (பதவி) — not address. */
+/** Role / position line on the card (பதவி) — padhavi / role plus area (place name), as on the printed ID. */
 function formatIdCardDesignation(member) {
-    const role = member.role_name || 'Member';
-    return exports.ID_CARD_ROLE_TA[role] || role;
+    const custom = String(member.designation || '').trim();
+    const role = String(member.role_name || 'Member').trim();
+    const title = custom || exports.ID_CARD_ROLE_TA[role] || role;
+    const place = String(member.block_name_ta || member.block_name || '').trim();
+    if (place && !title.toLowerCase().includes(place.toLowerCase())) {
+        return `${title},\n${place}`;
+    }
+    return title;
 }
