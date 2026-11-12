@@ -21,6 +21,7 @@ export function createPool(): Pool {
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
+      connectTimeout: 15000,
       dateStrings: true,
       charset: 'utf8mb4',
 
