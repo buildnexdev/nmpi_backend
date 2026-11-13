@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getOfficialEmail = getOfficialEmail;
 exports.sendNewMemberEnrollmentEmail = sendNewMemberEnrollmentEmail;
+exports.sendPublicServiceRequestEmail = sendPublicServiceRequestEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const DEFAULT_OFFICIAL_EMAIL = 'nmpiofficial2026@gmail.com';
 function getOfficialEmail() {
@@ -105,5 +106,82 @@ async function sendNewMemberEnrollmentEmail(member) {
     }
     catch (err) {
         console.error(`❌ Failed to send enrollment email to ${recipient}:`, err?.message || err);
+    }
+}
+async function sendPublicServiceRequestEmail(req) {
+    const recipient = getOfficialEmail();
+    const transporter = createTransporter();
+    if (!transporter)
+        return;
+    const district = req.district_name || '—';
+    const phone = req.mobile;
+    const submittedAt = req.submitted_at
+        ? new Date(req.submitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+        : new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; background: #f8fafc; padding: 24px; margin: 0; }
+    .card { max-width: 620px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+    .header { background: linear-gradient(135deg, #7a0c1e 0%, #4a0612 100%); color: #ffffff; padding: 24px 28px; text-align: center; }
+    .header h1 { margin: 0 0 6px 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+    .header p { margin: 0; font-size: 13px; opacity: 0.85; }
+    .body { padding: 28px; }
+    .badge { display: inline-block; background: #fef3c7; color: #92400e; font-weight: 700; font-size: 13px; padding: 6px 14px; border-radius: 20px; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { padding: 10px 14px; text-align: left; font-size: 14px; }
+    th { width: 35%; color: #64748b; font-weight: 600; border-bottom: 1px solid #f1f5f9; background: #f8fafc; }
+    td { width: 65%; color: #0f172a; font-weight: 500; border-bottom: 1px solid #f1f5f9; }
+    .desc-box { background: #f8fafc; border-left: 4px solid #7a0c1e; padding: 14px 18px; margin-top: 18px; border-radius: 6px; font-size: 14px; line-height: 1.6; color: #334155; white-space: pre-wrap; }
+    .footer { padding: 18px 28px; background: #f8fafc; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>நேதாஜி மக்கள் பாதுகாப்பு இயக்கம்</h1>
+      <p>Netaji Makkal Pathukappu Iyakkam — Public Service Desk</p>
+    </div>
+    <div class="body">
+      <div style="text-align: center;">
+        <span class="badge">புதிய பொது சேவை கோரிக்கை / New Public Service Request</span>
+      </div>
+      <table>
+        <tr><th>Ref Number (குறிப்பு எண்)</th><td><strong style="color: #7a0c1e; font-family: monospace; font-size: 15px;">${req.ref_no}</strong></td></tr>
+        <tr><th>Citizen Name (பெயர்)</th><td><strong>${req.name}</strong></td></tr>
+        <tr><th>Mobile Number</th><td><a href="tel:${phone}" style="color: #7a0c1e; text-decoration: none; font-weight: 600;">${phone}</a></td></tr>
+        <tr><th>District (மாவட்டம்)</th><td>${district}</td></tr>
+        <tr><th>Category (வகை)</th><td><strong style="color: #0369a1;">${req.category}</strong></td></tr>
+        <tr><th>Submitted At</th><td>${submittedAt}</td></tr>
+        ${req.attachment_url ? `<tr><th>Attachment</th><td><a href="${req.attachment_url}" target="_blank" style="color: #0284c7; font-weight: 600;">View Attachment File</a></td></tr>` : ''}
+      </table>
+      <div style="margin-top: 20px; font-weight: 700; font-size: 14px; color: #1e293b;">
+        Request Details / கோரிக்கை விவரம்:
+      </div>
+      <div class="desc-box">${req.description}</div>
+    </div>
+    <div class="footer">
+      Automated notification sent to official movement inbox: ${recipient}<br/>
+      NMPI Platform &copy; ${new Date().getFullYear()}
+    </div>
+  </div>
+</body>
+</html>
+  `;
+    try {
+        const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || `NMPI Portal <${recipient}>`;
+        await transporter.sendMail({
+            from: fromAddress,
+            to: recipient,
+            subject: `[NMPI Request] ${req.ref_no}: ${req.category} - ${req.name} (${district})`,
+            html,
+        });
+        console.log(`✉️ Public service request email sent successfully to ${recipient} for ${req.ref_no}`);
+    }
+    catch (err) {
+        console.error(`❌ Failed to send request email to ${recipient}:`, err?.message || err);
     }
 }

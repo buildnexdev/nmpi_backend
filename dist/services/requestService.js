@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RequestService = void 0;
 const database_1 = require("../config/database");
 const types_1 = require("../types");
+const emailService_1 = require("./emailService");
 class RequestService {
     static async generateRefNo() {
         const year = new Date().getFullYear();
@@ -17,6 +18,16 @@ class RequestService {
         const db = await (0, database_1.getDbConnection)();
         const ref_no = await this.generateRefNo();
         const submitted_at = new Date();
+        let districtName = data.district_name || null;
+        if (!districtName && data.district_id) {
+            try {
+                const [dRows] = await db.query('SELECT name_en, name_ta FROM tblDistricts WHERE id = ?', [data.district_id]);
+                if (dRows.length > 0) {
+                    districtName = dRows[0].name_en;
+                }
+            }
+            catch { }
+        }
         const [result] = await db.query(`INSERT INTO tblPublic_requests 
        (ref_no, user_id, name, mobile, district_id, district_name, category, description, attachment_url, status, submitted_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'SUBMITTED', ?)`, [
@@ -25,12 +36,25 @@ class RequestService {
             data.name.trim(),
             data.mobile.trim(),
             data.district_id || null,
-            data.district_name || null,
+            districtName,
             data.category.trim(),
             data.description.trim(),
             data.attachment_url || null,
             submitted_at,
         ]);
+        // Dispatch email notification to official NMPI email
+        (0, emailService_1.sendPublicServiceRequestEmail)({
+            ref_no,
+            name: data.name.trim(),
+            mobile: data.mobile.trim(),
+            district_name: districtName,
+            category: data.category.trim(),
+            description: data.description.trim(),
+            attachment_url: data.attachment_url || null,
+            submitted_at,
+        }).catch((err) => {
+            console.error(`[createRequest] Failed to dispatch email for request ${ref_no}:`, err?.message || err);
+        });
         return {
             id: result.insertId,
             ref_no,
